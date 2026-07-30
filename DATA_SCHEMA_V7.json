@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "event": {
+    "event_id": "UUID",
+    "session_id": "UUID",
+    "device_id": "UUID",
+    "sequence": "integer",
+    "type": "string",
+    "timestamp": "ISO-8601",
+    "performance_ms": "integer",
+    "payload": "object"
+  },
+  "planned_server_entities": [
+    "profiles",
+    "game_sessions",
+    "shoes",
+    "hands",
+    "cards_dealt",
+    "decisions",
+    "money_movements",
+    "audit_reports"
+  ]
+}

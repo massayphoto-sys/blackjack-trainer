@@ -1,0 +1,266 @@
+BLACKJACK DIAGNOSTIC — APLICACIÓN LOCAL
+
+Cómo abrir:
+1. Descomprime la carpeta.
+2. Abre el archivo index.html con Google Chrome, Microsoft Edge o Firefox.
+3. No necesitas dominio, servidor ni conexión a internet.
+
+Funciones incluidas:
+- Reparto inicial visible de dos cartas al jugador y dos a la casa.
+- Valor total del jugador desde el comienzo.
+- Valor visible de la casa mientras la carta oculta permanece tapada.
+- Saldo inicial.
+- Compra simulada de fichas.
+- Apuesta mínima y máxima de mesa.
+- Validación de saldo.
+- Zapato de seis barajas.
+- Pedir, plantarse y doblar.
+- Registro de decisiones.
+- Tiempo por decisión.
+- Precisión contra estrategia básica simplificada.
+- Guardado de sesiones en el navegador.
+- Exportación de sesiones en JSON.
+- Panel local de datos de prueba.
+
+Importante:
+- La opción Dividir está visible pero desactivada en esta versión.
+- Los datos guardados con localStorage solo existen en el navegador y computadora donde se ejecuta.
+- Borrar datos del navegador puede eliminar las sesiones guardadas.
+- Las compras de fichas son totalmente simuladas.
+
+Reglas del zapato y blackjack natural:
+- Se juega aproximadamente el 80% del zapato y queda un 20% sin jugar después del corte.
+- Al finalizar el zapato aparece el botón “Comenzar nueva partida”.
+- Si el jugador recibe blackjack natural, la casa no toma cartas adicionales.
+- Si la casa muestra una carta de valor 10, revisa la carta tapada.
+- Si la carta tapada es un As, la casa gana automáticamente con blackjack natural.
+- Estas resoluciones evitan consumir cartas innecesarias y mejoran la fidelidad estadística.
+
+
+BASE DE DATOS ACUMULATIVA — VERSIÓN 4
+- Guarda automáticamente cada zapato en el navegador.
+- Permite jugar durante varios días sin perder el progreso.
+- Meta visible de 100 zapatos.
+- Registra el orden completo del zapato antes de repartir.
+- Registra cada carta repartida y a quién fue entregada.
+- Registra todas las manos, apuestas, saldos, decisiones y tiempos de respuesta.
+- Registra las cartas iniciales y finales del jugador y de la casa.
+- Registra resultado, pago, blackjack natural y consumo de cartas.
+- Exporta una base completa en formato JSON.
+- Exporta un resumen ligero.
+- Permite importar un respaldo JSON.
+
+IMPORTANTE:
+El almacenamiento local depende del navegador y del equipo. Exporta periódicamente
+la base completa como respaldo. Para continuar acumulando datos, abre siempre la
+aplicación en el mismo navegador y evita borrar los datos del sitio.
+
+
+CORRECCIÓN V4.1 — DIVISIÓN DE PAREJAS
+- El botón Dividir se habilita cuando las dos cartas tienen el mismo rango.
+- Requiere saldo suficiente para una segunda apuesta igual.
+- Los ases divididos reciben exactamente una carta adicional por mano.
+- Las dos manos se resuelven por separado contra la misma mano de la casa.
+- Se registran cartas, apuestas, decisiones y resultados de cada mano dividida.
+
+
+VERSIÓN 4.2 — CAMBIOS DE CRUPIER Y CARTAS QUEMADAS
+- Al iniciar cada zapato se quema una carta.
+- El crupier cambia cada 15 minutos de juego.
+- Si los 15 minutos se cumplen durante una mano, el cambio espera hasta que termine.
+- El nuevo crupier quema una carta.
+- El cambio de crupier no inicia un zapato nuevo y no baraja las cartas restantes.
+- La interfaz muestra el número del crupier y la cuenta regresiva.
+- Cada cambio y cada carta quemada quedan registrados en el JSON.
+
+
+VERSIÓN 4.3 — CORRECCIÓN AL PASARSE DE 21
+- Si el jugador supera 21, la mano termina inmediatamente.
+- La casa no roba cartas después de que el jugador se pasa.
+- En manos divididas, si todas las manos se pasan, la casa tampoco roba cartas.
+- Esto evita consumir cartas innecesarias y mantiene exacta la secuencia del zapato.
+
+
+VERSIÓN 4.4 — INSURANCE
+- Cuando la casa muestra un As, se pregunta Insurance antes de permitir jugar.
+- Si se rechaza, la casa revisa inmediatamente su carta oculta.
+- Si tiene blackjack, la mano termina sin consumir más cartas.
+- Si no tiene blackjack, la mano continúa normalmente.
+- Si se acepta, se cobra un monto igual a la apuesta principal.
+- Si la casa tiene blackjack, el seguro protege la jugada según esta configuración.
+- Si no tiene blackjack, se pierde el seguro y la mano continúa.
+- La decisión, monto y resultado quedan registrados en la base de datos.
+
+
+VERSIÓN 4.5 — APUESTA RÁPIDA Y MÁXIMO 4 MANOS POR SPLIT
+- Controles de apuesta junto al botón Nueva mano: -25, -5, +5 y +25.
+- Flechas arriba/abajo cambian la apuesta en incrementos de $5.
+- Enter inicia la nueva mano.
+- Atajos H, S, D y P para pedir, plantarse, doblar y dividir.
+- Se permite volver a dividir hasta tener 4 manos simultáneas.
+- Al alcanzar 4 manos, el botón Dividir queda deshabilitado.
+- El JSON registra origen, profundidad, apuesta y resultado de cada mano dividida.
+
+
+VERSIÓN 4.6 — RACHA, RESULTADO Y PRIMERAS 10 MANOS
+- Se eliminó la fila Valor visible de la casa / Valor del jugador.
+- La información del zapato aparece junto al encabezado Casa.
+- La racha aparece junto al encabezado Jugador.
+- Racha positiva: verde con flecha hacia arriba.
+- Racha negativa: roja con flecha hacia abajo.
+- El área de cartas muestra WIN, LOSE o PUSH al terminar.
+- Se analizan las primeras 10 manos de cada zapato.
+- Se muestran totales, porcentaje de ganancia y zapatos con balance positivo o negativo.
+
+
+VERSIÓN 4.7 — CORRECCIÓN DE DISTRIBUCIÓN
+- Eliminada por completo la fila Valor visible de la casa / Valor del jugador.
+- La información del zapato ya no aparece en Mesa.
+- La información del zapato aparece al lado de Casa.
+- La racha aparece inmediatamente al lado de Jugador.
+- El total permanece alineado a la derecha.
+- Solo el área de cartas del jugador cambia de color y muestra WIN, LOSE o PUSH.
+
+
+VERSIÓN 4.8 — AJUSTES DE INTERFAZ Y TABLA
+- Eliminada la franja blanca vacía entre Mesa y Casa.
+- Reducido el tamaño visual de las tarjetas superiores.
+- Casa y Jugador alineados a la izquierda con encabezados más compactos.
+- Apuesta próxima mano movida junto a Nueva mano.
+- La tabla de decisiones incluye # Zapato como primera columna.
+- La tabla de decisiones incluye Racha como última columna.
+- Cada decisión guarda número de zapato y racha previa.
+
+
+VERSIÓN 4.9 — CORRECCIÓN DE BOTONES
+- Corregidos los identificadores de las tablas.
+- El reparto ya no interrumpe render() después de mostrar las cartas.
+- Pedir, Plantarse, Doblar y Dividir se habilitan correctamente.
+- Repartir primera mano cambia a Nueva mano.
+- Restaurados los encabezados correctos de sesiones, decisiones y movimientos.
+- Se añadieron validaciones para que elementos opcionales no bloqueen el juego.
+
+
+VERSIÓN 5.0 — CORRECCIÓN actionLabel
+- Añadida la función que traduce las acciones a español.
+- La tabla de decisiones ya no genera ReferenceError.
+- Pedir, Plantarse, Doblar, Dividir e Insurance se muestran correctamente.
+- La actualización de la tabla ya no interrumpe el juego.
+
+
+VERSIÓN 5.1 — HISTORIAL COMPLETO DE MANOS
+- La tabla muestra todas las manos guardadas, no solamente las últimas 12 decisiones.
+- Cada mano aparece una sola vez.
+- Las decisiones múltiples de una mano se agrupan en la columna Acciones.
+- La última columna se llama W/L.
+- W se muestra en verde, L en rojo y P en gris.
+- Se conserva el detalle completo de decisiones dentro del JSON.
+
+
+VERSIÓN 5.2 — TABLA DEL ZAPATO ACTUAL
+- La tabla visible muestra únicamente las manos del zapato actual.
+- Los datos de zapatos anteriores siguen guardados en la base y en el JSON.
+- El correlativo se reinicia en 1 al comenzar cada zapato.
+- Una mano ocupa una sola fila, aunque tenga varias decisiones.
+- Se equilibraron los anchos de todas las columnas.
+- Acciones y Referencia permiten saltos de línea y ya no deforman la tabla.
+
+
+VERSIÓN 5.3 — CORTE ALEATORIO DEL ZAPATO
+- Base del corte: dejar 20% del zapato sin jugar.
+- Variación aleatoria por zapato: entre 17.0% y 23.0%.
+- El valor se redondea a una décima.
+- El porcentaje elegido permanece fijo durante ese zapato.
+- Cada nuevo zapato genera un porcentaje diferente.
+- La interfaz y el JSON guardan el corte real y la penetración.
+
+
+VERSIÓN 5.4 — CORTE DEL JUGADOR Y CARTA DE PENETRACIÓN
+- Después del barajado, el jugador corta entre 15.0% y 85.0% del zapato.
+- El bloque delantero se mueve completo a la parte trasera.
+- Después, el crupier coloca una carta de corte independiente.
+- Esa carta deja aleatoriamente entre 17.0% y 23.0% del zapato sin jugar.
+- El corte del jugador cambia el orden de salida, pero no la penetración.
+- La primera carta se quema después de ambos cortes.
+- El JSON registra método de barajado, posición del corte del jugador, cartas movidas,
+  porcentaje de penetración, cartas restantes y todos los eventos de mesa.
+
+
+VERSIÓN 5.5 — REPARACIÓN DE TABLAS
+- El historial se construye desde el zapato activo.
+- Cada mano se sincroniza con la base al iniciar y finalizar.
+- La tabla financiera reconoce los campos time/type usados por el registro real.
+- Se eliminan Invalid Date y undefined.
+
+
+VERSIÓN 5.6 — HISTORIAL COMPLETO E INSURANCE COMO PUSH
+- La tabla visible conserva todas las manos de todos los zapatos.
+- Cada fila mantiene número de zapato y número de mano.
+- Los zapatos anteriores ya no desaparecen al iniciar uno nuevo.
+- Si el jugador toma Insurance y la casa tiene blackjack, la mano se registra como PUSH.
+- El saldo neto de esa mano es cero bajo la regla de seguro igual a la apuesta principal.
+- Los registros antiguos insured-loss protegidos se reparan automáticamente como PUSH.
+
+
+VERSIÓN 5.7 — INTEGRIDAD DE ZAPATOS Y GUARDADO DE SESIÓN
+- Se eliminan zapatos duplicados por ID.
+- El número de zapato se calcula únicamente dentro de la sesión actual.
+- La tabla muestra todos los zapatos reales de la sesión, sin mezclar datos antiguos.
+- Los registros heredados se reparan y renumeran al cargar.
+- Guardar sesión almacena zapatos, manos, decisiones, movimientos, saldo y precisión.
+- Guardar varias veces actualiza la misma sesión en lugar de duplicarla.
+
+
+VERSIÓN 6.0 — REPARTO AUDITABLE
+- Orden inicial estricto: Jugador 1, Casa 1 abierta, Jugador 2, Casa 2 tapada.
+- Cada carta conserva su posición fija dentro del zapato.
+- Se registra número de extracción, posición, destino, visibilidad y rol.
+- Las cartas quemadas también quedan auditadas.
+- Se añadió una tabla de Auditoría del reparto.
+
+
+VERSIÓN 6.1 — GUARDAR SESIÓN
+- Corregido el evento del botón Guardar sesión.
+- Guarda o actualiza una sola copia de la sesión actual.
+- Incluye todos los zapatos, manos, decisiones, movimientos y saldos.
+- Muestra confirmación visible con hora del último guardado.
+- Si ocurre un error, se muestra el motivo en la interfaz.
+
+
+VERSIÓN 6.2 — CORRECCIÓN PRIMERA MANO
+- Corregido el error currentHandRecord null al repartir la primera mano.
+- La mano se crea obligatoriamente antes de iniciar el reparto.
+- dealInitialRound incluye protección adicional si el registro aún no existe.
+- startHandRecord devuelve siempre el registro creado.
+
+VERSIÓN 6.3 — ALMACENAMIENTO COMPACTO
+- Cartas y auditoría guardadas en formato compacto.
+- Se evita duplicar zapatos completos en las sesiones guardadas.
+- Manejo seguro de QuotaExceededError.
+- Botón para limpiar copias redundantes.
+
+
+VERSIÓN 6.4 — REGISTRO ÚNICO POR MANO
+- Eliminada la segunda llamada accidental a startHandRecord.
+- Cada mano física genera exactamente una fila.
+- Se evita duplicar el contador global de manos.
+- Reparación automática de pares de registros incompletos existentes.
+- La reparación fusiona cartas iniciales, secuencia, decisiones y resultado.
+- Las manos se renumeran correlativamente dentro de cada zapato.
+- La tabla omite registros sin finalizar como protección adicional.
+
+
+VERSIÓN 6.5 — PORCENTAJE DE GANANCIA O PÉRDIDA
+- Nuevo indicador Ganancia / pérdida.
+- Fórmula: resultado neto dividido entre saldo inicial por 100.
+- Ganancia: flecha hacia arriba y porcentaje verde.
+- Pérdida: flecha hacia abajo y porcentaje rojo.
+- Resultado neutro: 0.00% en gris.
+- El porcentaje se actualiza automáticamente.
+
+
+VERSIÓN 6.6 — CARTAS COMPLETAS EN HISTORIAL
+- La columna Jugador muestra todas las cartas recibidas y el total final.
+- La columna Dealer muestra las dos cartas iniciales, cartas adicionales y total final.
+- Ejemplo: 10 + Q + 2 = 22.
+- Las manos divididas se muestran por separado usando el formato (cartas = total) | (cartas = total).
