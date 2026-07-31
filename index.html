@@ -14,7 +14,7 @@
   <link rel="apple-touch-icon" href="/icon-192.png">
 
   <meta charset="utf-8">
-<title>Blackjack Trainer v8.0</title>
+<title>Blackjack Trainer v8.0.1</title>
   <style>
     :root{
       --bg:#f3f4f1;--panel:#ffffff;--text:#181a18;--muted:#6b716d;--border:#d9ddd9;
@@ -488,6 +488,9 @@
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_O1umLqsF6m11SoVS14aN6w_aiyqQw5t';
 
   const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    global: {
+      fetch: window.fetch.bind(window)
+    },
     auth: {
       persistSession: true,
       autoRefreshToken: true,
@@ -526,6 +529,24 @@
     }
   }
 
+  async function testSupabaseConnection(){
+    const response = await window.fetch(`${SUPABASE_URL}/auth/v1/health`, {
+      method: 'GET',
+      mode: 'cors',
+      cache: 'no-store',
+      headers: {
+        apikey: SUPABASE_PUBLISHABLE_KEY,
+        Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`
+      }
+    });
+
+    if(!response.ok){
+      const details = await response.text().catch(()=>'');
+      throw new Error(`Supabase respondió ${response.status}${details ? `: ${details}` : ''}`);
+    }
+    return true;
+  }
+
   async function sendMagicLink(){
     const emailInput = byId('authEmail');
     const button = byId('authMagicLinkBtn');
@@ -544,13 +565,27 @@
       ? undefined
       : `${location.origin}${location.pathname}`;
 
-    const { error } = await client.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: redirectTo,
-        shouldCreateUser: true
-      }
-    });
+    let error = null;
+
+    try{
+      await testSupabaseConnection();
+
+      const result = await client.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: redirectTo,
+          shouldCreateUser: true
+        }
+      });
+
+      error = result.error;
+    }catch(networkError){
+      console.error('Supabase network diagnostic:', {
+        url: SUPABASE_URL,
+        error: networkError
+      });
+      error = networkError;
+    }
 
     if(button) button.disabled = false;
 
@@ -2658,7 +2693,7 @@ window.addEventListener('load', function () {
     setTimeout(function(){ loader.remove(); }, 350);
   }
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('/service-worker.js').catch(function (error) {
+    navigator.serviceWorker.getRegistrations().then(rs=>Promise.all(rs.map(r=>r.unregister()))).catch(function (error) {
       console.warn('Service worker no disponible:', error);
     });
   }
@@ -3061,6 +3096,6 @@ else start();
 })();
 </script>
 
-<div class="web-version-badge">v8.0 · Supabase Authentication</div>
+<div class="web-version-badge">v8.0.1 · Supabase Network Fix</div>
 </body>
 </html>
