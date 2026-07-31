@@ -39,7 +39,7 @@
     .muted{color:var(--muted)}
     label{font-size:14px}
     input,select,button{font:inherit}
-    input,select{width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;background:#fff}
+    input,select{width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;background:#fff;color:#181a18!important;-webkit-text-fill-color:#181a18!important;caret-color:#181a18!important;opacity:1!important}
     button{padding:11px 14px;border:1px solid var(--border);border-radius:10px;background:#fff;cursor:pointer}
     button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
     button.primary:hover{background:var(--accent2)}
@@ -138,12 +138,13 @@
     }
 
 
-    :root{color-scheme:dark;}
+    :root{color-scheme:light;}
     html,body{min-height:100%;overscroll-behavior:none;}
     body{padding-bottom:env(safe-area-inset-bottom);}
     button,input,select{font-size:16px;}
     button{touch-action:manipulation;}
     #appLoading{
+      pointer-events:none;
       position:fixed;inset:0;z-index:99999;display:flex;
       align-items:center;justify-content:center;flex-direction:column;
       background:#071f18;color:#fff;font-family:Arial,sans-serif;
@@ -2374,8 +2375,23 @@ window.downloadSaved=function(id){
   a.href=url;a.download=`${id}.json`;a.click();URL.revokeObjectURL(url);
 }
 function clearLocal(){
-  if(confirm('¿Eliminar todas las sesiones guardadas en este navegador?')){
-    localStorage.removeItem('blackjack_sessions');renderTables();
+  if(confirm('¿Eliminar todos los datos locales de Blackjack Trainer en este navegador?')){
+    const exactKeys=[
+      'blackjack_sessions',
+      'blackjackSessions',
+      'blackjackSessionsIndex',
+      'blackjackLastSavedAt',
+      'blackjack_v7_snapshot',
+      'blackjack_v7_events',
+      'blackjack_v7_database'
+    ];
+    exactKeys.forEach(key=>localStorage.removeItem(key));
+    Object.keys(localStorage)
+      .filter(key=>key.startsWith('blackjack_')||key.startsWith('blackjackV7'))
+      .forEach(key=>localStorage.removeItem(key));
+    if($('saveSessionStatus'))$('saveSessionStatus').textContent='';
+    renderTables();
+    message('Datos locales eliminados correctamente.','success');
   }
 }
 function resetApp(){if(confirm('¿Reiniciar la aplicación actual?'))location.reload()}
