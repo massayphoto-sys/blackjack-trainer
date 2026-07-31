@@ -57,6 +57,14 @@
     .mistake-item .m-expected { color: var(--green-bright); font-weight: 700; }
 
     .empty-state { text-align: center; color: var(--muted); font-size: 13px; padding: 30px 20px; }
+
+    .glossary-panel {
+      margin: 0 14px; padding: 12px 14px; background: rgba(255,255,255,.04);
+      border: 1px solid var(--line-soft); border-radius: 12px; font-size: 12px; color: #dce2de; line-height: 1.5;
+    }
+    .glossary-panel p { margin: 0 0 8px; }
+    .glossary-panel p:last-child { margin-bottom: 0; }
+    .glossary-panel strong { color: var(--text); }
   </style>
 </head>
 <body>
@@ -64,6 +72,13 @@
     <div class="reports-topbar">
       <button id="backButton" class="icon-btn" type="button" aria-label="Volver a la mesa">←</button>
       <h1>Tu precisión</h1>
+      <button id="glossaryButton" class="icon-btn" type="button" aria-label="¿Qué es esto?">ⓘ</button>
+    </div>
+    <div class="glossary-panel" id="glossaryPanel" hidden>
+      <p><strong>Manos duras:</strong> no tienen As, o el As solo puede valer 1. Son la mayoría de las manos (ej. 10-6 = 16).</p>
+      <p><strong>Manos suaves:</strong> tienen un As que vale 11 sin pasarte de 21 (ej. As-6 = 17 suave). Nunca te quemas al pedir, porque el As baja a valer 1 si hace falta.</p>
+      <p><strong>Pares:</strong> tus dos cartas valen lo mismo (ej. 8-8) — es la única situación donde puedes dividir la mano.</p>
+      <p><strong>"vs [carta]":</strong> es la carta que muestra la casa (el dealer) en esa mano — no la tuya.</p>
     </div>
     <div class="reports-body" id="reportsBody">
       <div class="empty-state">Cargando…</div>

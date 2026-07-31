@@ -9,6 +9,8 @@ import { getMyProfile, getPlayerStats, getMyMistakes } from './game-repository.j
 
 const backButton = document.getElementById('backButton');
 const reportsBody = document.getElementById('reportsBody');
+const glossaryButton = document.getElementById('glossaryButton');
+const glossaryPanel = document.getElementById('glossaryPanel');
 
 const CATEGORY_LABELS = { hard: 'Manos duras', soft: 'Manos suaves', pair: 'Pares' };
 const ERROR_CATEGORY_MAP = { hard: 'hard_total', soft: 'soft_total', pair: 'pair_splitting' };
@@ -145,6 +147,12 @@ async function loadReport() {
 
 if (backButton) {
   backButton.addEventListener('click', () => { window.location.href = './game.html'; });
+}
+
+if (glossaryButton) {
+  glossaryButton.addEventListener('click', () => {
+    glossaryPanel.hidden = !glossaryPanel.hidden;
+  });
 }
 
 async function guardSession(session) {
