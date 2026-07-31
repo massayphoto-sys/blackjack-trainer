@@ -246,7 +246,7 @@ export class BlackjackTableController {
       <div class="seat">
         <div class="seat-label">Dealer</div>
         <div class="seat-row">
-          <div class="card-row">${this.renderCards(dealerVisible)}${(!resolved && !this.hand.naturalBlackjackResolved) ? this.renderFaceDownCard() : ''}</div>
+          <div class="card-row dealer-cards">${this.renderCards(dealerVisible)}${(!resolved && !this.hand.naturalBlackjackResolved) ? this.renderFaceDownCard() : ''}</div>
           <div class="total-pill">${dealerTotal}</div>
         </div>
       </div>
@@ -351,7 +351,7 @@ export class BlackjackTableController {
   }
 
   renderFaceDownCard() {
-    return `<div class="card face-down" aria-label="Carta tapada"></div>`;
+    return `<div class="card face-down" style="z-index:-1;" aria-label="Carta tapada"></div>`;
   }
 
   escapeHtml(str) {

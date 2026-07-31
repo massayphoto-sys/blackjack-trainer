@@ -184,8 +184,9 @@ button { cursor: pointer; }
   font-family: var(--num); font-weight: 800; font-size: 12px; line-height: 1.15;
   text-align: center;
 }
-.card .idx-tl { top: 4px; left: 5px; }
-.card .idx-br { bottom: 4px; right: 5px; transform: rotate(180deg); }
+.card .idx-tl { top: 4px; right: 5px; }
+.card .idx-br { bottom: 4px; left: 5px; transform: rotate(180deg); }
+.dealer-cards .card.face-down { margin-right: -38px; }
 @keyframes deal { from { transform: translateY(-14px) scale(.9); opacity: 0; } to { transform: translateY(0) scale(1); opacity: 1; } }
 
 .total-pill {
