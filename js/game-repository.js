@@ -6,6 +6,35 @@
 import { supabase } from './supabase.js';
 import { serializeShoeForStorage } from './deck.js';
 
+/** Obtiene el perfil del usuario autenticado (creado automáticamente por trigger al registrarse). */
+export async function getMyProfile() {
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) throw new Error('No hay sesión activa.');
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+/** Guarda el nombre a mostrar del usuario (paso de onboarding tras el primer login). */
+export async function updateDisplayName(displayName) {
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) throw new Error('No hay sesión activa.');
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({ display_name: displayName, updated_at: new Date().toISOString() })
+    .eq('id', user.id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 /** Crea una nueva sesión de entrenamiento para el usuario autenticado. */
 export async function createTrainingSession({ bankrollStart, minimumBet, maximumBet, gameMode = 'heads_up' }) {
   const { data: { user }, error: userError } = await supabase.auth.getUser();

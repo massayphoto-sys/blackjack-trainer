@@ -51,9 +51,20 @@
           </div>
           <button id="logoutButton" class="secondary" type="button">Cerrar sesión</button>
 
-          <div id="gameStartPanel">
+          <div id="gameStartPanel" hidden>
             <button id="startSessionButton" class="primary" type="button">Empezar a entrenar</button>
           </div>
+
+          <div id="onboardingPanel" hidden>
+            <p class="eyebrow">ANTES DE EMPEZAR</p>
+            <h3>¿Cómo te llamas?</h3>
+            <form id="onboardingForm" novalidate>
+              <label for="displayName">Nombre</label>
+              <input id="displayName" name="displayName" type="text" autocomplete="name" placeholder="Tu nombre" required maxlength="60">
+              <button id="onboardingButton" class="primary" type="submit">Continuar</button>
+            </form>
+          </div>
+
           <div id="blackjackTable" hidden></div>
         </div>
 
