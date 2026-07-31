@@ -129,6 +129,7 @@ export class BlackjackTableController {
     this.sessionTotals.totalEvLoss += this.hand.decisions.reduce((s, d) => s + (d.evLoss || 0), 0);
     await repo.updateSessionTotals(this.session.id, this.sessionTotals);
 
+    this.render(); // refresca el saldo y muestra las cartas finales de la casa
     this.renderResult(handResults, totalProfit);
   }
 
@@ -142,7 +143,7 @@ export class BlackjackTableController {
     if (!this.root || !this.hand) return;
     const dealerVisible = this.hand.naturalBlackjackResolved
       ? this.hand.dealerCards
-      : [this.hand.dealerCards[0]];
+      : (allPlayerHandsResolved(this.hand) ? this.hand.dealerCards : [this.hand.dealerCards[0]]);
 
     const legal = availableActions(this.hand, this.bankroll - this.currentActiveHandsCommitted());
 
@@ -201,7 +202,14 @@ export class BlackjackTableController {
     if (!this.root) return;
     const banner = document.createElement('div');
     banner.className = `result-banner ${totalProfit > 0 ? 'win' : totalProfit < 0 ? 'loss' : 'push'}`;
-    banner.textContent = `Resultado: ${totalProfit > 0 ? '+' : ''}$${totalProfit.toFixed(2)}`;
+    banner.innerHTML = `
+      <p>Resultado: ${totalProfit > 0 ? '+' : ''}$${totalProfit.toFixed(2)}</p>
+      <button data-next-hand type="button">Siguiente mano</button>
+    `;
     this.root.appendChild(banner);
+    banner.querySelector('[data-next-hand]').addEventListener('click', () => {
+      banner.remove();
+      this.dealNewHand();
+    });
   }
 }
