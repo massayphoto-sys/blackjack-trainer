@@ -338,7 +338,12 @@ export class BlackjackTableController {
   }
 
   renderCards(cards) {
-    return cards.map(c => `<div class="card ${['♥','♦'].includes(c.suit) ? 'red' : ''}"><span>${c.rank}</span><span class="suit">${c.suit}</span></div>`).join('');
+    return cards.map(c => `
+      <div class="card ${['♥','♦'].includes(c.suit) ? 'red' : ''}">
+        <span class="idx idx-tl">${c.rank}<br>${c.suit}</span>
+        <span class="idx idx-br">${c.rank}<br>${c.suit}</span>
+      </div>
+    `).join('');
   }
 
   renderFaceDownCard() {
