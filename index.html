@@ -2,83 +2,91 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Blackjack Trainer — acceso seguro y diagnóstico de conexión.">
-  <meta name="theme-color" content="#07110d">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+  <meta name="description" content="Blackjack Trainer — acceso.">
+  <meta name="theme-color" content="#030503">
   <title>Blackjack Trainer</title>
-  <link rel="stylesheet" href="./css/styles.css">
+  <link rel="stylesheet" href="./css/game.css">
+  <style>
+    .auth-screen { height: 100dvh; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; }
+    .auth-screen .brand { margin-bottom: 30px; }
+    .auth-screen .b1 { font-weight: 900; font-size: 22px; letter-spacing: .01em; }
+    .auth-screen .b2 { display: block; font-weight: 800; font-size: 12px; letter-spacing: .22em; color: var(--green-bright); margin-top: 2px; }
+    .auth-card { width: 100%; max-width: 340px; }
+    .auth-card h2 { margin: 0 0 6px; font-size: 19px; }
+    .auth-card p.hint { margin: 0 0 18px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+    .auth-card form { display: grid; gap: 10px; }
+    .auth-card label { text-align: left; font-size: 12px; font-weight: 700; color: #dce2de; }
+    .auth-card input {
+      width: 100%; padding: 13px 14px; color: var(--text); background: rgba(255,255,255,.04);
+      border: 1px solid var(--line); border-radius: 10px; outline: none;
+    }
+    .auth-card input:focus { border-color: var(--green-bright); }
+    .auth-card button.primary {
+      width: 100%; padding: 13px 16px; border: 0; border-radius: 10px; font-weight: 800;
+      color: #04110a; background: var(--green-bright); margin-top: 4px;
+    }
+    .auth-card button.primary:disabled { opacity: .5; }
+    .auth-msg { min-height: 20px; margin-top: 14px; font-size: 13px; color: var(--muted); line-height: 1.5; }
+    .auth-msg.success { color: var(--green-bright); }
+    .auth-msg.error { color: #ff9d9d; }
+    .status-dot { display:inline-block; width:7px; height:7px; border-radius:50%; background: var(--warning); margin-right:6px; }
+    .status-dot.ok { background: var(--green-bright); }
+    .status-dot.error { background: #ff7d7d; }
+    .status-line { font-size: 11px; color: var(--muted); margin-bottom: 18px; }
+    .toggle-diag { background: none; border: 0; color: var(--muted); font-size: 11px; text-decoration: underline; margin-top: 16px; }
+    .diag-box { margin-top: 12px; font-size: 11px; color: var(--muted); text-align: left; background: rgba(255,255,255,.03); border-radius: 8px; padding: 10px; display: grid; gap: 4px; }
+  </style>
 </head>
 <body>
-  <main class="shell">
-    <section class="brand-panel" aria-labelledby="brand-title">
-      <div class="brand-mark" aria-hidden="true">BT</div>
-      <p class="eyebrow">BLACKJACK TRAINER · V9</p>
-      <h1 id="brand-title">Entrena decisiones. Detecta patrones. Mejora tu juego.</h1>
-      <p class="brand-copy">Base modular para autenticación, registro de sesiones y análisis del comportamiento del jugador.</p>
+  <div class="auth-screen">
+    <div class="brand"><span class="b1">BLACKJACK</span><span class="b2">TRAINER</span></div>
 
-      <div class="feature-list" aria-label="Funciones de esta versión">
-        <div><span>01</span><p>Acceso mediante enlace seguro enviado por correo.</p></div>
-        <div><span>02</span><p>Sesión persistente en este dispositivo.</p></div>
-        <div><span>03</span><p>Diagnóstico visible de conexión con Supabase.</p></div>
+    <div class="auth-card">
+      <div class="status-line"><span id="connectionDot" class="status-dot"></span><span id="connectionLabel">Verificando conexión…</span></div>
+
+      <div id="signedOutView">
+        <h2>Inicia sesión</h2>
+        <p class="hint">Escribe tu correo. Te enviamos un enlace de acceso, sin contraseña.</p>
+        <form id="loginForm" novalidate>
+          <label for="email">Correo electrónico</label>
+          <input id="email" name="email" type="email" autocomplete="email" inputmode="email" placeholder="nombre@correo.com" required>
+          <button id="loginButton" class="primary" type="submit">Enviar enlace de acceso</button>
+        </form>
       </div>
-    </section>
 
-    <section class="auth-panel" aria-labelledby="auth-title">
-      <div class="auth-card">
-        <div class="status-line">
-          <span id="connectionDot" class="status-dot" aria-hidden="true"></span>
-          <span id="connectionLabel">Verificando conexión…</span>
-        </div>
-
-        <div id="signedOutView">
-          <p class="eyebrow">ACCESO</p>
-          <h2 id="auth-title">Inicia tu sesión</h2>
-          <p class="muted">Escribe tu correo. Recibirás un Magic Link para entrar sin contraseña.</p>
-
-          <form id="loginForm" novalidate>
-            <label for="email">Correo electrónico</label>
-            <input id="email" name="email" type="email" autocomplete="email" inputmode="email" placeholder="nombre@correo.com" required>
-            <button id="loginButton" class="primary" type="submit">Enviar enlace de acceso</button>
-          </form>
-        </div>
-
-        <div id="signedInView" hidden>
-          <p class="eyebrow">SESIÓN ACTIVA</p>
-          <h2>Acceso confirmado</h2>
-          <div class="user-box">
-            <span>Usuario</span>
-            <strong id="userEmail">—</strong>
-          </div>
-          <button id="logoutButton" class="secondary" type="button">Cerrar sesión</button>
-
-          <div id="onboardingPanel" hidden>
-            <p class="eyebrow">ANTES DE EMPEZAR</p>
-            <h3>¿Cómo te llamas?</h3>
-            <form id="onboardingForm" novalidate>
-              <label for="displayName">Nombre</label>
-              <input id="displayName" name="displayName" type="text" autocomplete="name" placeholder="Tu nombre" required maxlength="60">
-              <button id="onboardingButton" class="primary" type="submit">Continuar</button>
-            </form>
-          </div>
-        </div>
-
-        <div id="message" class="message" role="status" aria-live="polite"></div>
-
-        <details class="diagnostics">
-          <summary>Diagnóstico técnico</summary>
-          <dl>
-            <div><dt>Aplicación</dt><dd id="diagOrigin">—</dd></div>
-            <div><dt>Supabase</dt><dd id="diagSupabase">—</dd></div>
-            <div><dt>Red</dt><dd id="diagNetwork">—</dd></div>
-            <div><dt>Auth API</dt><dd id="diagAuth">Pendiente</dd></div>
-            <div><dt>Sesión</dt><dd id="diagSession">Pendiente</dd></div>
-          </dl>
-          <button id="retryButton" class="text-button" type="button">Repetir diagnóstico</button>
-        </details>
+      <div id="checkingView" hidden>
+        <h2>Un momento…</h2>
+        <p class="hint">Estamos verificando tu sesión.</p>
       </div>
-      <p class="privacy-note">Esta versión no contiene el simulador ni guarda manos. Su única función es validar la autenticación.</p>
-    </section>
-  </main>
+
+      <div id="onboardingPanel" hidden>
+        <h2>¿Cómo te llamas?</h2>
+        <p class="hint">Solo se pregunta una vez.</p>
+        <form id="onboardingForm" novalidate>
+          <label for="displayName">Nombre</label>
+          <input id="displayName" name="displayName" type="text" autocomplete="name" placeholder="Tu nombre" required maxlength="60">
+          <button id="onboardingButton" class="primary" type="submit">Comenzar</button>
+        </form>
+      </div>
+
+      <div id="redirectingView" hidden>
+        <h2>Listo</h2>
+        <p class="hint">Te llevamos a la mesa…</p>
+      </div>
+
+      <div id="message" class="auth-msg" role="status" aria-live="polite"></div>
+
+      <button id="toggleDiag" class="toggle-diag" type="button">Diagnóstico técnico</button>
+      <div id="diagBox" class="diag-box" hidden>
+        <div>Aplicación: <span id="diagOrigin">—</span></div>
+        <div>Supabase: <span id="diagSupabase">—</span></div>
+        <div>Red: <span id="diagNetwork">—</span></div>
+        <div>Auth API: <span id="diagAuth">Pendiente</span></div>
+        <div>Sesión: <span id="diagSession">Pendiente</span></div>
+      </div>
+    </div>
+  </div>
 
   <script type="module" src="./js/app.js"></script>
   <script type="module" src="./js/game-bootstrap.js"></script>

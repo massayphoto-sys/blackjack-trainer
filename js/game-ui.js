@@ -15,10 +15,12 @@ import * as repo from './game-repository.js';
 const RESULT_LABELS = { win: 'WIN', blackjack: 'WIN', loss: 'LOSE', push: 'PUSH' };
 
 export class BlackjackTableController {
-  constructor({ root, playerName = '', initialBankroll = 1000, minimumBet = 20, maximumBet = 2000, onUpdate = () => {} }) {
+  constructor({ root, playerName = '', initialBankroll = 1000, minimumBet = 20, maximumBet = 2000, onUpdate = () => {}, onBuyChipsClick = () => {}, onLimitsClick = () => {} }) {
     this.root = root;
     this.playerName = playerName;
     this.onUpdate = onUpdate;
+    this.onBuyChipsClick = onBuyChipsClick;
+    this.onLimitsClick = onLimitsClick;
     this.game = createGame({ numDecks: 6 });
     this.bankroll = initialBankroll;
     this.bankrollStart = initialBankroll;
@@ -67,7 +69,11 @@ export class BlackjackTableController {
       const previousBet = this.hand?.playerHands?.[0]?.bet ?? null;
       this.hand = dealInitialRound(this.game, { betAmount: this.currentBet, bankrollBeforeHand: this.bankroll, previousBetAmount: previousBet });
       this.render();
-      if (this.hand.naturalBlackjackResolved) await this.finishHand();
+      if (this.hand.naturalBlackjackResolved) {
+        await this.finishHand();
+      } else if (this.hand.insurance.offered) {
+        this.showInsuranceModal();
+      }
     } catch (error) {
       console.error('dealNewHand error:', error);
       this.lastError = error?.message || String(error);
@@ -93,17 +99,27 @@ export class BlackjackTableController {
     }
   }
 
+  showInsuranceModal() {
+    const amount = (this.currentBet / 2).toFixed(2);
+    const backdrop = document.createElement('div');
+    backdrop.className = 'sheet-backdrop';
+    backdrop.innerHTML = `
+      <div class="sheet">
+        <h3>La casa muestra As</h3>
+        <p style="margin:0;color:var(--muted);font-size:13px;">¿Tomar seguro por $${amount}? Paga 2 a 1 si el dealer tiene blackjack.</p>
+        <div class="sheet-actions">
+          <button class="cancel" data-insurance-no type="button">No</button>
+          <button class="confirm" data-insurance-yes type="button">Sí, tomar seguro</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(backdrop);
+    backdrop.querySelector('[data-insurance-yes]').addEventListener('click', () => { backdrop.remove(); this.decideInsurance(true); });
+    backdrop.querySelector('[data-insurance-no]').addEventListener('click', () => { backdrop.remove(); this.decideInsurance(false); });
+  }
+
   async playerAction(action) {
     try {
-      // Si hay seguro pendiente de decidir, cualquier otra acción lo rechaza implícitamente primero.
-      if (this.hand.insurance?.offered && this.hand.insurance.taken === null) {
-        resolveInsurance(this.hand, false, 0);
-        if (this.hand.playerHands.every(h => h.status === 'dealer_blackjack')) {
-          this.markDecisionTime();
-          await this.finishHand();
-          return;
-        }
-      }
       const legal = availableActions(this.hand, this.bankroll - this.currentActiveHandsCommitted());
       if (!legal.includes(action)) return;
       this.markDecisionTime();
@@ -237,11 +253,6 @@ export class BlackjackTableController {
         </div>
       </div>
 
-      <div class="mid-stats">
-        ${streak !== 0 ? `<span class="pill ${streak > 0 ? 'positive' : 'negative'}">Racha ${streak > 0 ? '+' : ''}${streak} ${streak > 0 ? '↑' : '↓'}</span>` : ''}
-        <span class="pill ${profitPct > 0 ? 'positive' : profitPct < 0 ? 'negative' : ''}">${profitPct > 0 ? '+' : ''}${profitPct}% ${profitPct > 0 ? '↑' : profitPct < 0 ? '↓' : ''}</span>
-      </div>
-
       <div class="seat">
         <div class="seat-label">Tú</div>
         ${this.hand.playerHands.map((h, i) => {
@@ -260,13 +271,12 @@ export class BlackjackTableController {
       </div>
 
       <div class="bet-section">
-        <div class="bet-label">Apuesta${insurancePending ? ' · seguro pendiente' : ''}</div>
+        <div class="bet-label">Apuesta</div>
         <div class="bet-stepper">
           <button class="step-btn" data-bet-delta="-10" type="button" ${resolved ? '' : 'disabled'}>−</button>
           <span class="bet-amount">${this.currentBet}</span>
           <button class="step-btn" data-bet-delta="10" type="button" ${resolved ? '' : 'disabled'}>+</button>
         </div>
-        ${insurancePending ? `<button data-decline-insurance type="button" class="step-btn" style="margin-top:8px;width:auto;padding:0 14px;font-size:11px;">Rechazar seguro</button>` : ''}
       </div>
 
       <div class="dock">
@@ -278,7 +288,7 @@ export class BlackjackTableController {
             <button class="action-btn hit" data-action="hit" ${legal.includes('hit') ? '' : 'disabled'}><span class="icon">＋</span>PEDIR</button>
             <button class="action-btn stand" data-action="stand" ${legal.includes('stand') ? '' : 'disabled'}><span class="icon">−</span>PLANTARSE</button>
             <button class="action-btn split" data-action="split" ${legal.includes('split') ? '' : 'disabled'}><span class="icon">⇄</span>DIVIDIR</button>
-            <button class="action-btn insurance" data-take-insurance type="button" ${insurancePending ? '' : 'disabled'}><span class="icon">🛡</span>SEGURO</button>
+            <button class="action-btn insurance" type="button" disabled title="El seguro se pregunta automáticamente"><span class="icon">🛡</span>SEGURO</button>
           </div>
         `}
 
@@ -298,6 +308,11 @@ export class BlackjackTableController {
           <button data-bet-pct="0.5" type="button" ${resolved ? '' : 'disabled'}>50%</button>
           <button data-bet-delta="1" type="button" ${resolved ? '' : 'disabled'}>+1</button>
           <button data-bet-delta="10" type="button" ${resolved ? '' : 'disabled'}>+10</button>
+        </div>
+
+        <div class="util-row">
+          <button data-open-chips type="button">+ Comprar fichas</button>
+          <button data-open-limits type="button">Cambiar límites</button>
         </div>
       </div>
     ` : '';
@@ -332,10 +347,10 @@ export class BlackjackTableController {
     this.root.querySelectorAll('[data-bet-delta]').forEach(btn => btn.addEventListener('click', () => this.adjustBet(Number(btn.dataset.betDelta))));
     const pctBtn = this.root.querySelector('[data-bet-pct]');
     if (pctBtn) pctBtn.addEventListener('click', () => this.setBetPercentOfBankroll(Number(pctBtn.dataset.betPct)));
-    const insBtn = this.root.querySelector('[data-take-insurance]');
-    if (insBtn) insBtn.addEventListener('click', () => this.decideInsurance(true));
-    const declineBtn = this.root.querySelector('[data-decline-insurance]');
-    if (declineBtn) declineBtn.addEventListener('click', () => this.decideInsurance(false));
+    const chipsBtn = this.root.querySelector('[data-open-chips]');
+    if (chipsBtn) chipsBtn.addEventListener('click', () => this.onBuyChipsClick());
+    const limitsBtn = this.root.querySelector('[data-open-limits]');
+    if (limitsBtn) limitsBtn.addEventListener('click', () => this.onLimitsClick());
   }
 
   renderCards(cards) {
