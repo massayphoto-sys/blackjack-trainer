@@ -246,26 +246,29 @@ export class BlackjackTableController {
       <div class="seat">
         <div class="seat-label">Dealer</div>
         <div class="seat-row">
-          <div class="card-row">${this.renderCards(dealerVisible)}</div>
+          <div class="card-row">${this.renderCards(dealerVisible)}${(!resolved && !this.hand.naturalBlackjackResolved) ? this.renderFaceDownCard() : ''}</div>
           <div class="total-pill">${dealerTotal}</div>
         </div>
       </div>
 
       <div class="seat">
         <div class="seat-label">Tú</div>
-        ${this.hand.playerHands.map((h, i) => {
-          const r = results ? results[i] : null;
-          const cls = r ? r.result : (i === this.hand.activeHandIndex ? 'active' : '');
-          return `
-            <div class="hand-slot ${cls}">
-              <div class="seat-row">
-                <div class="card-row">${this.renderCards(h.cards)}</div>
-                <div class="total-pill">${handValue(h.cards).total}</div>
+        <div class="hands-row">
+          ${this.hand.playerHands.map((h, i) => {
+            const r = results ? results[i] : null;
+            const cls = r ? r.result : (i === this.hand.activeHandIndex ? 'active' : '');
+            return `
+              <div class="hand-slot ${cls}">
+                ${this.hand.playerHands.length > 1 ? `<div class="hand-slot-label">Jugada ${i + 1}</div>` : ''}
+                <div class="seat-row">
+                  <div class="card-row">${this.renderCards(h.cards)}</div>
+                  <div class="total-pill">${handValue(h.cards).total}</div>
+                </div>
+                ${r ? `<div class="result-overlay"><span class="result-word ${r.result}">${RESULT_LABELS[r.result] || r.result.toUpperCase()}</span><span class="result-amount">${r.profit > 0 ? '+' : ''}$${r.profit.toFixed(2)}</span></div>` : ''}
               </div>
-              ${r ? `<div class="result-overlay"><span class="result-word ${r.result}">${RESULT_LABELS[r.result] || r.result.toUpperCase()}</span><span class="result-amount">${r.profit > 0 ? '+' : ''}$${r.profit.toFixed(2)}</span></div>` : ''}
-            </div>
-          `;
-        }).join('')}
+            `;
+          }).join('')}
+        </div>
       </div>
 
       <div class="dock">
@@ -336,6 +339,10 @@ export class BlackjackTableController {
 
   renderCards(cards) {
     return cards.map(c => `<div class="card ${['♥','♦'].includes(c.suit) ? 'red' : ''}"><span>${c.rank}</span><span class="suit">${c.suit}</span></div>`).join('');
+  }
+
+  renderFaceDownCard() {
+    return `<div class="card face-down" aria-label="Carta tapada"></div>`;
   }
 
   escapeHtml(str) {

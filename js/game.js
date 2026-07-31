@@ -129,7 +129,12 @@ export function availableActions(hand, bankroll) {
   const canAffordDouble = bankroll >= active.bet;
   const canAffordSplit = bankroll >= active.bet;
 
-  if (active.cards.length === 2 && canAffordDouble && !active.isSplitAces) {
+  if (
+    active.cards.length === 2 &&
+    canAffordDouble &&
+    !active.isSplitAces &&
+    total >= 9 && total <= 11
+  ) {
     actions.push(ACTIONS.DOUBLE);
   }
   if (
@@ -241,16 +246,18 @@ export function applyPlayerAction(game, hand, playerAction) {
 
 /** Mueve activeHandIndex a la siguiente mano que siga 'active'; si no hay más, queda en null. */
 function advanceToNextActiveHand(hand) {
+  // Si la mano activa actual todavía sigue en juego (recién dividida, por
+  // ejemplo), no hay que avanzar — sigue siendo su turno.
+  const current = hand.playerHands[hand.activeHandIndex];
+  if (current && current.status === 'active') return;
+
   for (let i = hand.activeHandIndex + 1; i < hand.playerHands.length; i++) {
     if (hand.playerHands[i].status === 'active') {
       hand.activeHandIndex = i;
       return;
     }
   }
-  // Revisa si la mano actual sigue activa (split de no-ases puede seguir jugándose)
-  if (hand.playerHands[hand.activeHandIndex]?.status !== 'active') {
-    hand.activeHandIndex = -1; // todas resueltas o esperando al dealer
-  }
+  hand.activeHandIndex = -1; // todas resueltas o esperando al dealer
 }
 
 export function allPlayerHandsResolved(hand) {

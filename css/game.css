@@ -156,7 +156,9 @@ button { cursor: pointer; }
 
 .seat { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .seat-label { font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: #cfe3d5; }
-.seat-row { display: flex; align-items: center; gap: 10px; }
+.seat-row { display: flex; align-items: center; gap: 10px; justify-content: center; }
+.hands-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.hand-slot-label { font-size: 9px; font-weight: 800; letter-spacing: .05em; color: var(--muted); text-align: center; margin-bottom: 3px; text-transform: uppercase; }
 .card-row { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; min-height: 66px; align-items: center; }
 
 .card {
@@ -172,6 +174,12 @@ button { cursor: pointer; }
   animation: deal .25s ease-out;
 }
 .card.red { color: var(--card-red); }
+.card.face-down {
+  background:
+    repeating-linear-gradient(45deg, rgba(255,255,255,.08) 0 3px, transparent 3px 7px),
+    var(--felt-1);
+  border: 1px solid rgba(255,255,255,.15);
+}
 .card .suit { font-size: 16px; margin-top: 2px; }
 @keyframes deal { from { transform: translateY(-14px) scale(.9); opacity: 0; } to { transform: translateY(0) scale(1); opacity: 1; } }
 
