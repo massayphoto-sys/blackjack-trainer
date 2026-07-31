@@ -1,0 +1,328 @@
+// game.js — Motor de una mano de blackjack clásico (6 barajas, dealer
+// se planta en 17, DAS permitido, split hasta 4 manos, insurance).
+// No sabe nada de Supabase ni del DOM — solo reglas del juego.
+// game-repository.js persiste lo que este módulo produce.
+// game-ui.js llama a estas funciones desde los botones.
+
+import { createShoe, dealCard, isPastCutCard, handValue, RANK_VALUE } from './deck.js';
+import { basicStrategyAction, exactOptimalAction, normalizeDealerUpcard, ACTIONS } from './strategy.js';
+import { buildDecisionAnalytics } from './analytics.js';
+
+/**
+ * NOTA IMPORTANTE SOBRE EV (expected value) POR DECISIÓN:
+ * Calcular el EV exacto en dinero de cada acción posible (hit/stand/
+ * double/split) para una mano y composición de zapato específicas
+ * requiere una simulación combinatoria (o tablas precalculadas por
+ * millones de manos, tipo las que usan CVCX/CVData). Ese cálculo es un
+ * proyecto en sí mismo y está fuera del alcance de este motor inicial.
+ *
+ * Por ahora, `ev_player_action`/`ev_optimal_action` se dejan en null si
+ * el jugador siguió la jugada correcta (EV loss = 0 por definición), y
+ * se marca con un valor heurístico simple si se desvía (ver
+ * estimateHeuristicEvLoss). Sustituir por un motor de EV real es el
+ * siguiente paso natural una vez el flujo de datos esté validado.
+ */
+function estimateHeuristicEvLoss(playerAction, optimalAction) {
+  if (playerAction === optimalAction) return 0;
+  // Heurística provisional: castiga más los errores en manos "grandes"
+  // (double/split perdidos) que los errores de hit/stand simples.
+  const bigMistake = [ACTIONS.DOUBLE, ACTIONS.SPLIT].includes(optimalAction);
+  return bigMistake ? 0.15 : 0.05; // fracción de la apuesta, placeholder
+}
+
+export function createGame({ numDecks = 6, rng = Math.random } = {}) {
+  return {
+    numDecks,
+    rng,
+    shoe: null,
+    shoeNumber: 0,
+    handNumberInShoe: 0,
+    handsPlayedInSession: 0,
+    currentStreak: 0, // positivo = racha ganadora, negativo = racha perdedora
+  };
+}
+
+export function startNewShoe(game) {
+  game.shoe = createShoe({ numDecks: game.numDecks, rng: game.rng });
+  game.shoeNumber += 1;
+  game.handNumberInShoe = 0;
+  return game.shoe;
+}
+
+export function shoeNeedsReplacement(game) {
+  return !game.shoe || isPastCutCard(game.shoe);
+}
+
+/**
+ * Reparte la ronda inicial: Jugador 1, Casa 1 (abierta), Jugador 2,
+ * Casa 2 (tapada) — orden estricto, tal como documentado en v6.0.
+ * Devuelve el estado de la mano lista para que el jugador decida.
+ */
+export function dealInitialRound(game, { betAmount, bankrollBeforeHand, previousBetAmount }) {
+  if (shoeNeedsReplacement(game)) startNewShoe(game);
+  game.handNumberInShoe += 1;
+  game.handsPlayedInSession += 1;
+
+  const shoe = game.shoe;
+  const playerCards = [dealCard(shoe)];
+  const dealerCards = [dealCard(shoe)]; // dealer[0] visible
+  playerCards.push(dealCard(shoe));
+  dealerCards.push(dealCard(shoe)); // dealer[1] tapada (hole card)
+
+  const dealerUpcard = normalizeDealerUpcard(dealerCards[0].rank);
+  const playerBJ = handValue(playerCards).isBlackjack;
+  const dealerShowsAce = dealerCards[0].rank === 'A';
+  const dealerShowsTen = ['10','J','Q','K'].includes(dealerCards[0].rank);
+
+  const hand = {
+    handNumberInShoe: game.handNumberInShoe,
+    shoeNumber: game.shoeNumber,
+    betAmount,
+    bankrollBeforeHand,
+    previousBetAmount: previousBetAmount ?? null,
+    currentStreakBeforeHand: game.currentStreak,
+    handsPlayedInSessionSoFar: game.handsPlayedInSession - 1,
+    dealerUpcard,
+    dealerHoleCard: dealerCards[1],
+    dealerCards,
+    playerHands: [
+      { cards: playerCards, bet: betAmount, status: 'active', isDoubled: false, isSplitAces: false, splitIndex: 0 },
+    ],
+    activeHandIndex: 0,
+    insurance: dealerShowsAce ? { offered: true, taken: null, amount: 0 } : { offered: false },
+    decisions: [], // se va llenando con cada acción tomada
+    startedAt: new Date().toISOString(),
+    naturalBlackjackResolved: false,
+  };
+
+  // Blackjack natural del jugador: la casa no toma cartas adicionales
+  // salvo para revisar si también tiene blackjack (push) cuando
+  // corresponde revisar (10 o A visibles).
+  if (playerBJ && (dealerShowsAce || dealerShowsTen)) {
+    const dealerBJ = handValue(dealerCards).isBlackjack;
+    hand.naturalBlackjackResolved = true;
+    hand.playerHands[0].status = dealerBJ ? 'push' : 'blackjack_win';
+  } else if (playerBJ) {
+    hand.naturalBlackjackResolved = true;
+    hand.playerHands[0].status = 'blackjack_win';
+  } else if (dealerShowsTen) {
+    // Si casa muestra 10, revisa la tapada: si es As, blackjack natural
+    // de la casa y gana automáticamente sin consumir cartas extra.
+    const dealerBJ = handValue(dealerCards).isBlackjack;
+    if (dealerBJ) {
+      hand.naturalBlackjackResolved = true;
+      hand.playerHands[0].status = 'dealer_blackjack';
+    }
+  }
+
+  return hand;
+}
+
+/** Determina las acciones disponibles para la mano activa en este momento. */
+export function availableActions(hand, bankroll) {
+  if (hand.naturalBlackjackResolved) return [];
+  const active = hand.playerHands[hand.activeHandIndex];
+  if (!active || active.status !== 'active') return [];
+
+  const actions = [ACTIONS.HIT, ACTIONS.STAND];
+  const { total } = handValue(active.cards);
+  const canAffordDouble = bankroll >= active.bet;
+  const canAffordSplit = bankroll >= active.bet;
+
+  if (active.cards.length === 2 && canAffordDouble && !active.isSplitAces) {
+    actions.push(ACTIONS.DOUBLE);
+  }
+  if (
+    active.cards.length === 2 &&
+    active.cards[0].rank === active.cards[1].rank &&
+    hand.playerHands.length < 4 &&
+    canAffordSplit
+  ) {
+    actions.push(ACTIONS.SPLIT);
+  }
+  return actions;
+}
+
+/**
+ * Registra y aplica una decisión del jugador sobre la mano activa.
+ * Este es el punto central donde se calcula, ANTES de aplicar la
+ * acción, cuál era la jugada óptima (básica y exacta) — para poder
+ * comparar contra lo que el jugador realmente hizo.
+ */
+export function applyPlayerAction(game, hand, playerAction) {
+  const active = hand.playerHands[hand.activeHandIndex];
+  const { total, isSoft } = handValue(active.cards);
+  const isPair = active.cards.length === 2 && active.cards[0].rank === active.cards[1].rank;
+
+  const handType = isPair ? 'pair' : (isSoft ? 'soft' : 'hard');
+  const key = isPair
+    ? (active.cards[0].rank === 'A' ? 'A' : normalizeDealerUpcard(active.cards[0].rank))
+    : total;
+
+  // Analítica ANTES de repartir la carta de esta decisión
+  const analytics = buildDecisionAnalytics(game.shoe, game.numDecks, hand.dealerHoleCard ? [hand.dealerHoleCard] : []);
+
+  const expected = basicStrategyAction(handType, key, hand.dealerUpcard);
+  const exact = exactOptimalAction({ handType, key, dealerUpcard: hand.dealerUpcard, trueCount: analytics.true_count });
+
+  const isCorrect = playerAction === expected;
+  const evLoss = estimateHeuristicEvLoss(playerAction, expected) * active.bet;
+
+  const decisionRecord = {
+    playerHandIndex: hand.activeHandIndex,
+    playerCards: active.cards.slice(),
+    dealerUpcard: hand.dealerUpcard,
+    playerTotal: total,
+    handType,
+    availableActions: availableActions(hand, Infinity), // Infinity: no filtrar por bankroll aquí, solo registrar el set de reglas
+    playerAction,
+    expectedAction: expected,
+    isCorrect,
+    evLoss,
+    remainingComposition: analytics.remaining_composition,
+    evOptimalActionExact: null, // placeholder — requiere motor de EV real
+    optimalActionExact: exact.action,
+    deviatedFromBasicTable: exact.deviated,
+    runningCount: analytics.running_count,
+    trueCount: analytics.true_count,
+  };
+  hand.decisions.push(decisionRecord);
+
+  // Aplica la acción real al estado del juego
+  switch (playerAction) {
+    case ACTIONS.HIT: {
+      active.cards.push(dealCard(game.shoe));
+      const v = handValue(active.cards);
+      if (v.total > 21) active.status = 'bust';
+      break;
+    }
+    case ACTIONS.STAND: {
+      active.status = 'stood';
+      break;
+    }
+    case ACTIONS.DOUBLE: {
+      active.cards.push(dealCard(game.shoe));
+      active.bet *= 2;
+      active.isDoubled = true;
+      const v = handValue(active.cards);
+      active.status = v.total > 21 ? 'bust' : 'stood';
+      break;
+    }
+    case ACTIONS.SPLIT: {
+      const [cardA, cardB] = active.cards;
+      const isAceSplit = cardA.rank === 'A';
+      active.cards = [cardA, dealCard(game.shoe)];
+      active.isSplitAces = isAceSplit;
+      const newHand = {
+        cards: [cardB, dealCard(game.shoe)],
+        bet: active.bet,
+        status: 'active',
+        isDoubled: false,
+        isSplitAces: isAceSplit,
+        splitIndex: hand.playerHands.length,
+      };
+      hand.playerHands.splice(hand.activeHandIndex + 1, 0, newHand);
+      // Ases divididos reciben exactamente una carta adicional por mano
+      if (isAceSplit) {
+        active.status = 'stood';
+      } else {
+        const v = handValue(active.cards);
+        if (v.total > 21) active.status = 'bust';
+      }
+      break;
+    }
+    default:
+      throw new Error(`Acción desconocida: ${playerAction}`);
+  }
+
+  advanceToNextActiveHand(hand);
+  return decisionRecord;
+}
+
+/** Mueve activeHandIndex a la siguiente mano que siga 'active'; si no hay más, queda en null. */
+function advanceToNextActiveHand(hand) {
+  for (let i = hand.activeHandIndex + 1; i < hand.playerHands.length; i++) {
+    if (hand.playerHands[i].status === 'active') {
+      hand.activeHandIndex = i;
+      return;
+    }
+  }
+  // Revisa si la mano actual sigue activa (split de no-ases puede seguir jugándose)
+  if (hand.playerHands[hand.activeHandIndex]?.status !== 'active') {
+    hand.activeHandIndex = -1; // todas resueltas o esperando al dealer
+  }
+}
+
+export function allPlayerHandsResolved(hand) {
+  return hand.playerHands.every(h => h.status !== 'active');
+}
+
+export function allPlayerHandsBusted(hand) {
+  return hand.playerHands.every(h => h.status === 'bust');
+}
+
+/**
+ * Juega la mano de la casa: pide hasta 17 (incluyendo 17 blando —
+ * dealer se planta en cualquier 17, regla "clásica" documentada).
+ * No roba cartas si el jugador ya se pasó en todas sus manos.
+ */
+export function playDealerHand(game, hand) {
+  if (hand.naturalBlackjackResolved) return hand.dealerCards;
+  if (allPlayerHandsBusted(hand)) return hand.dealerCards; // no consume cartas innecesarias
+
+  let v = handValue(hand.dealerCards);
+  while (v.total < 17) {
+    hand.dealerCards.push(dealCard(game.shoe));
+    v = handValue(hand.dealerCards);
+  }
+  return hand.dealerCards;
+}
+
+/** Resuelve el insurance según la carta tapada del dealer. */
+export function resolveInsurance(hand, took, insuranceAmount) {
+  const dealerBJ = handValue(hand.dealerCards).isBlackjack;
+  hand.insurance = { offered: true, taken: took, amount: took ? insuranceAmount : 0, won: took && dealerBJ };
+  if (!took && dealerBJ) {
+    hand.playerHands.forEach(h => { h.status = 'dealer_blackjack'; });
+  }
+  return hand.insurance;
+}
+
+/**
+ * Calcula el resultado y profit de cada mano del jugador contra la
+ * mano final de la casa. Devuelve un resumen por mano + el total.
+ */
+export function resolveHandResults(hand) {
+  const dealerValue = handValue(hand.dealerCards);
+  const dealerBust = dealerValue.total > 21;
+
+  const results = hand.playerHands.map(ph => {
+    if (ph.status === 'blackjack_win') return { ...ph, result: 'blackjack', profit: ph.bet * 1.5 };
+    if (ph.status === 'push') return { ...ph, result: 'push', profit: 0 };
+    if (ph.status === 'dealer_blackjack') return { ...ph, result: 'loss', profit: -ph.bet };
+    if (ph.status === 'bust') return { ...ph, result: 'loss', profit: -ph.bet };
+
+    const playerValue = handValue(ph.cards);
+    if (dealerBust) return { ...ph, result: 'win', profit: ph.bet };
+    if (playerValue.total > dealerValue.total) return { ...ph, result: 'win', profit: ph.bet };
+    if (playerValue.total < dealerValue.total) return { ...ph, result: 'loss', profit: -ph.bet };
+    return { ...ph, result: 'push', profit: 0 };
+  });
+
+  const insuranceProfit = hand.insurance?.taken
+    ? (hand.insurance.won ? hand.insurance.amount * 2 : -hand.insurance.amount)
+    : 0;
+
+  const totalProfit = results.reduce((s, r) => s + r.profit, 0) + insuranceProfit;
+  return { handResults: results, insuranceProfit, totalProfit };
+}
+
+/** Actualiza la racha del juego después de resolver una mano (para hands.current_streak_before_hand de la SIGUIENTE mano). */
+export function updateStreak(game, totalProfit) {
+  if (totalProfit > 0) {
+    game.currentStreak = game.currentStreak > 0 ? game.currentStreak + 1 : 1;
+  } else if (totalProfit < 0) {
+    game.currentStreak = game.currentStreak < 0 ? game.currentStreak - 1 : -1;
+  }
+  // profit === 0 (push puro): la racha no cambia
+}
