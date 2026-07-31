@@ -9,7 +9,7 @@ export const supabase = createClient(CONFIG.supabaseUrl, CONFIG.supabasePublisha
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    flowType: 'pkce'
+    flowType: 'implicit'
   },
   global: {
     headers: { 'X-Client-Info': `${CONFIG.appName}/${CONFIG.version}` }
