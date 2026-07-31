@@ -111,7 +111,7 @@ export class BlackjackTableController {
         </div>
       </div>
     `;
-    document.body.appendChild(backdrop);
+    (this.root.closest('.table-screen') || document.body).appendChild(backdrop);
     backdrop.querySelector('[data-insurance-yes]').addEventListener('click', () => { backdrop.remove(); this.decideInsurance(true); });
     backdrop.querySelector('[data-insurance-no]').addEventListener('click', () => { backdrop.remove(); this.decideInsurance(false); });
   }

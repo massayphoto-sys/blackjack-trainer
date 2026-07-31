@@ -11,6 +11,7 @@ import { BlackjackTableController } from './game-ui.js';
 const startScreen = document.getElementById('startScreen');
 const startButton = document.getElementById('startSessionButton');
 const tableRoot = document.getElementById('tableRoot');
+const tableScreen = document.getElementById('tableScreen');
 const playerNameLabel = document.getElementById('playerNameLabel');
 const signOutButton = document.getElementById('signOutButton');
 const buyChipsButton = document.getElementById('buyChipsButton');
@@ -59,7 +60,7 @@ function openSheet(innerHtml, wireFn) {
   const backdrop = document.createElement('div');
   backdrop.className = 'sheet-backdrop';
   backdrop.innerHTML = `<div class="sheet">${innerHtml}</div>`;
-  document.body.appendChild(backdrop);
+  (tableScreen || document.body).appendChild(backdrop);
   backdrop.querySelectorAll('[data-close]').forEach(btn => btn.addEventListener('click', () => backdrop.remove()));
   wireFn(backdrop);
 }

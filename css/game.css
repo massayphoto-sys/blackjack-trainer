@@ -46,6 +46,7 @@ button { cursor: pointer; }
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
 }
 
 /* --- Header --- */
@@ -273,7 +274,7 @@ button { cursor: pointer; }
 .util-row button:active { background: rgba(255,255,255,.08); color: var(--text); }
 
 /* --- Hoja modal (ajustes) --- */
-.sheet-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: flex-end; z-index: 20; }
+.sheet-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: flex-end; z-index: 20; }
 .sheet {
   width: 100%; background: var(--panel-dark); border-top: 1px solid var(--line);
   border-radius: 20px 20px 0 0; padding: 20px 18px calc(20px + env(safe-area-inset-bottom));
