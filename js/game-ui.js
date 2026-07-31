@@ -338,8 +338,12 @@ export class BlackjackTableController {
   }
 
   renderCards(cards) {
-    return cards.map(c => `
-      <div class="card ${['♥','♦'].includes(c.suit) ? 'red' : ''}">
+    // La primera carta repartida (índice 0) queda a la derecha, abajo del
+    // todo; cada carta siguiente se monta encima y hacia la izquierda —
+    // reproduciendo el orden real de reparto. z-index explícito garantiza
+    // el apilamiento correcto sin depender del orden del DOM.
+    return cards.map((c, i) => `
+      <div class="card ${['♥','♦'].includes(c.suit) ? 'red' : ''}" style="z-index:${i};">
         <span class="idx idx-tl">${c.rank}<br>${c.suit}</span>
         <span class="idx idx-br">${c.rank}<br>${c.suit}</span>
       </div>

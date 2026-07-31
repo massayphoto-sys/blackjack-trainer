@@ -159,7 +159,7 @@ button { cursor: pointer; }
 .seat-row { display: flex; align-items: center; gap: 10px; justify-content: center; }
 .hands-row { display: flex; flex-direction: row-reverse; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .hand-slot-label { font-size: 9px; font-weight: 800; letter-spacing: .05em; color: var(--muted); text-align: center; margin-bottom: 3px; text-transform: uppercase; }
-.card-row { display: flex; flex-wrap: wrap; justify-content: center; min-height: 66px; align-items: center; }
+.card-row { display: flex; flex-direction: row-reverse; flex-wrap: wrap; justify-content: center; min-height: 66px; align-items: center; }
 
 .card {
   position: relative;
@@ -171,7 +171,7 @@ button { cursor: pointer; }
   animation: deal .25s ease-out;
   flex: 0 0 auto;
 }
-.card:not(:first-child) { margin-left: -22px; }
+.card:not(:first-child) { margin-right: -22px; }
 .card.red { color: var(--card-red); }
 .card.face-down {
   background:
