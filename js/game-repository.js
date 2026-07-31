@@ -210,3 +210,22 @@ export async function getPlayerStats() {
   if (error) throw error;
   return data;
 }
+
+/**
+ * Consulta los errores (mistakes) más recientes del usuario, opcionalmente
+ * filtrados por categoría (pair_splitting/soft_total/hard_total/other) —
+ * para el detalle que se abre al hacer clic en una fila del reporte.
+ */
+export async function getMyMistakes({ errorCategory = null, limit = 30 } = {}) {
+  let query = supabase
+    .from('mistakes')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (errorCategory) query = query.eq('error_category', errorCategory);
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return data;
+}

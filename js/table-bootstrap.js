@@ -16,6 +16,7 @@ const playerNameLabel = document.getElementById('playerNameLabel');
 const signOutButton = document.getElementById('signOutButton');
 const buyChipsButton = document.getElementById('buyChipsButton');
 const limitsButton = document.getElementById('limitsButton');
+const reportsButton = document.getElementById('reportsButton');
 
 const statsCard = document.getElementById('statsCard');
 const statPrecision = document.getElementById('statPrecision');
@@ -125,6 +126,7 @@ async function handleStart() {
 if (startButton) startButton.addEventListener('click', handleStart);
 if (buyChipsButton) buyChipsButton.addEventListener('click', openBuyChipsSheet);
 if (limitsButton) limitsButton.addEventListener('click', openLimitsSheet);
+if (reportsButton) reportsButton.addEventListener('click', () => { window.location.href = './reports.html'; });
 
 if (signOutButton) {
   signOutButton.addEventListener('click', async () => {
