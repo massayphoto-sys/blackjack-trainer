@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+  <meta name="description" content="Blackjack Trainer — mesa de entrenamiento.">
+  <meta name="theme-color" content="#030503">
+  <title>Mesa — Blackjack Trainer</title>
+  <link rel="stylesheet" href="./css/game.css">
+</head>
+<body>
+  <div class="table-screen">
+    <div class="topbar">
+      <button id="menuButton" class="icon-btn" type="button" aria-label="Menú">☰</button>
+      <div class="brand">
+        <span class="b1">BLACKJACK</span>
+        <span class="b2">TRAINER</span>
+      </div>
+      <button id="profileButton" class="icon-btn profile" type="button" aria-label="Perfil y ajustes">👤</button>
+    </div>
+
+    <div class="stats-card" id="statsCard" hidden>
+      <div class="stat">
+        <div class="stat-label">🎯 Precisión</div>
+        <div class="stat-value green" id="statPrecision">—</div>
+        <div class="stat-sub" id="statPrecisionSub">0 / 0</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">🕑 Tiempo prom.</div>
+        <div class="stat-value blue" id="statAvgTime">—</div>
+        <div class="stat-sub">por decisión</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">📈 Racha actual</div>
+        <div class="stat-value green" id="statStreak">0</div>
+        <div class="stat-sub" id="statBestStreak">mejor: 0</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">📅 Esta sesión</div>
+        <div class="stat-value" id="statSessionTime" style="font-size:12px;">—</div>
+        <div class="stat-sub" id="statSessionHands">0 manos</div>
+      </div>
+    </div>
+
+    <div class="shoe-bar" id="shoeBar" hidden>
+      <div class="item"><div class="item-label">Zapato</div><div class="item-value" id="shoeNumberLabel">1</div></div>
+      <div class="item"><div class="item-label">Restantes</div><div class="item-value" id="cardsRemainingLabel">0</div></div>
+      <div class="item"><div class="item-label">% Jugado</div><div class="item-value" id="pctPlayedLabel">0%</div></div>
+      <div class="item"><div class="item-label">Corte al</div><div class="item-value" id="cutPctLabel">0%</div></div>
+      <div class="item"><div class="item-label">Mano</div><div class="item-value" id="handNumberLabel">0</div></div>
+    </div>
+
+    <div id="tableRoot" class="felt">
+      <div class="start-screen" id="startScreen">
+        <h1>Listo para entrenar</h1>
+        <p>Cada mano que juegues se analiza y se guarda para medir tu criterio, no solo tu resultado.</p>
+        <button id="startSessionButton" type="button">Empezar a entrenar</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./js/table-bootstrap.js"></script>
+</body>
+</html>

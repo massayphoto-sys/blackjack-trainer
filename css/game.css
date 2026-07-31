@@ -1,0 +1,267 @@
+/* game.css — Mesa de juego, réplica del diseño de referencia:
+   header negro, tarjeta de estadísticas blanca, barra de info del
+   zapato, mesa de fieltro verde con marca de agua tipo casino real,
+   botones de acción a color, panel de saldo/rendimiento con apuestas
+   rápidas. Pantalla fija (sin scroll), mobile-first. */
+
+:root {
+  --bg: #030503;
+  --felt-1: #0f3323;
+  --felt-2: #0a2618;
+  --felt-3: #071c12;
+  --panel-dark: #0b1a12;
+  --line: rgba(255,255,255,.12);
+  --line-soft: rgba(255,255,255,.08);
+  --text: #f3f4ee;
+  --muted: #9ba79f;
+  --green: #37b262;
+  --green-bright: #4fd07a;
+  --green-dark: #163d27;
+  --danger: #c94848;
+  --danger-dark: #3a1414;
+  --warning: #f3c969;
+  --blue: #3866ad;
+  --orange: #d98a2b;
+  --purple: #6f42a8;
+  --card-bg: #fbfaf6;
+  --card-black: #14261c;
+  --card-red: #c23b34;
+  --radius: 16px;
+  --num: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; overscroll-behavior: none; }
+body {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+button, input { font: inherit; }
+button { cursor: pointer; }
+
+.table-screen {
+  height: 100dvh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* --- Header --- */
+.topbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #000;
+}
+.topbar .brand { text-align: center; flex: 1; }
+.topbar .brand .b1 { font-weight: 900; font-size: 18px; letter-spacing: .01em; }
+.topbar .brand .b2 { display: block; font-weight: 800; font-size: 11px; letter-spacing: .22em; color: var(--green-bright); margin-top: 1px; }
+.icon-btn {
+  width: 36px; height: 36px; display: grid; place-items: center; flex: 0 0 auto;
+  background: transparent; border: 0; border-radius: 50%; color: var(--text);
+}
+.icon-btn.profile { border: 1.5px solid var(--text); }
+.icon-btn:active { background: rgba(255,255,255,.08); }
+
+/* --- Tarjeta de estadísticas --- */
+.stats-card {
+  flex: 0 0 auto;
+  margin: 10px 12px 0;
+  padding: 14px 10px;
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  color: #22281f;
+}
+.stats-card .stat { text-align: center; padding: 0 2px; border-left: 1px solid rgba(0,0,0,.08); }
+.stats-card .stat:first-child { border-left: 0; }
+.stats-card .stat-label {
+  display: flex; align-items: center; justify-content: center; gap: 3px;
+  font-size: 8.5px; font-weight: 800; letter-spacing: .04em; color: #6b7268; text-transform: uppercase; margin-bottom: 4px;
+}
+.stats-card .stat-value { font-family: var(--num); font-weight: 800; font-size: 16px; line-height: 1; }
+.stats-card .stat-value.green { color: var(--green); }
+.stats-card .stat-value.blue { color: var(--blue); }
+.stats-card .stat-sub { font-size: 9.5px; color: #6b7268; margin-top: 3px; line-height: 1.3; }
+
+/* --- Barra de info del zapato --- */
+.shoe-bar {
+  flex: 0 0 auto;
+  margin: 8px 12px 0;
+  padding: 10px 4px;
+  background: rgba(255,255,255,.03);
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+}
+.shoe-bar .item { text-align: center; }
+.shoe-bar .item-label { font-size: 8px; font-weight: 800; letter-spacing: .04em; color: var(--muted); text-transform: uppercase; margin-bottom: 3px; }
+.shoe-bar .item-value { font-family: var(--num); font-weight: 800; font-size: 15px; }
+
+/* --- Mesa de fieltro --- */
+.felt {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 10px 12px;
+  margin-top: 8px;
+  position: relative;
+  overflow: hidden;
+  background:
+    repeating-linear-gradient(135deg, rgba(255,255,255,.015) 0 2px, transparent 2px 6px),
+    radial-gradient(circle at 50% 0%, var(--felt-1) 0%, var(--felt-2) 55%, var(--felt-3) 100%);
+}
+.felt-watermark {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  flex-direction: column; text-align: center; pointer-events: none; opacity: .16; z-index: 0;
+  color: var(--green-bright);
+}
+.felt-watermark .fw-title { font-size: 26px; font-weight: 900; letter-spacing: .06em; }
+.felt-watermark .fw-sub { font-size: 10px; font-weight: 700; letter-spacing: .12em; margin-top: 2px; }
+.felt-watermark .fw-rules { font-size: 8px; letter-spacing: .06em; margin-top: 6px; line-height: 1.6; }
+
+.seat { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.seat-label { font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: #cfe3d5; }
+.seat-row { display: flex; align-items: center; gap: 10px; }
+.card-row { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; min-height: 66px; align-items: center; }
+
+.card {
+  width: 48px; height: 66px;
+  background: var(--card-bg);
+  border-radius: 7px;
+  box-shadow: 0 4px 10px rgba(0,0,0,.45);
+  display: flex; flex-direction: column; align-items: flex-start;
+  padding: 5px 0 0 6px;
+  gap: 0;
+  font-family: var(--num); font-weight: 800; font-size: 16px; line-height: 1;
+  color: var(--card-black);
+  animation: deal .25s ease-out;
+}
+.card.red { color: var(--card-red); }
+.card .suit { font-size: 16px; margin-top: 2px; }
+@keyframes deal { from { transform: translateY(-14px) scale(.9); opacity: 0; } to { transform: translateY(0) scale(1); opacity: 1; } }
+
+.total-pill {
+  font-family: var(--num); font-weight: 800; font-size: 15px; color: var(--text);
+  background: rgba(0,0,0,.35); border: 1px solid var(--line-soft);
+  padding: 8px 12px; border-radius: 10px; min-width: 34px; text-align: center;
+}
+
+.mid-stats { position: relative; z-index: 1; display: flex; justify-content: center; gap: 8px; padding: 6px 0; }
+.pill {
+  display: inline-flex; align-items: center; gap: 4px; font-family: var(--num);
+  font-size: 11px; font-weight: 800; padding: 5px 10px; border-radius: 999px;
+  background: rgba(255,255,255,.06); border: 1px solid var(--line-soft); color: var(--muted);
+}
+.pill.positive { color: var(--green-bright); border-color: rgba(79,208,122,.4); background: rgba(79,208,122,.1); }
+.pill.negative { color: #ff8a8a; border-color: rgba(255,125,125,.4); background: rgba(255,125,125,.1); }
+
+.hand-slot { position: relative; z-index: 1; }
+.hand-slot.active .card-row { outline: 2px solid var(--green-bright); outline-offset: 6px; border-radius: 10px; }
+.hand-slot.win .card-row, .hand-slot.blackjack .card-row { outline: 2px solid var(--green-bright); outline-offset: 6px; border-radius: 10px; }
+.hand-slot.loss .card-row { outline: 2px solid var(--danger); outline-offset: 6px; border-radius: 10px; }
+.hand-slot.push .card-row { outline: 2px solid var(--warning); outline-offset: 6px; border-radius: 10px; }
+
+.result-overlay {
+  position: absolute; inset: -8px; z-index: 5;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  background: rgba(3,5,3,.78); border-radius: 14px;
+  animation: fadein .2s ease-out;
+}
+@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+.result-word { font-family: var(--num); font-weight: 900; font-size: 30px; letter-spacing: .04em; }
+.result-word.win, .result-word.blackjack { color: var(--green-bright); text-shadow: 0 0 20px rgba(79,208,122,.6); }
+.result-word.loss { color: var(--danger); text-shadow: 0 0 20px rgba(201,72,72,.6); }
+.result-word.push { color: var(--warning); text-shadow: 0 0 20px rgba(243,201,105,.5); }
+.result-amount { font-family: var(--num); font-size: 13px; color: var(--muted); }
+
+/* --- Apuesta --- */
+.bet-section { position: relative; z-index: 1; text-align: center; margin-top: 4px; }
+.bet-section .bet-label { font-size: 10px; font-weight: 800; letter-spacing: .12em; color: var(--muted); text-transform: uppercase; margin-bottom: 6px; }
+.bet-stepper { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.bet-stepper .step-btn {
+  width: 42px; height: 38px; border-radius: 10px; border: 1px solid var(--line-soft);
+  background: rgba(0,0,0,.3); color: var(--text); font-weight: 900; font-size: 18px;
+}
+.bet-stepper .step-btn:disabled { opacity: .3; }
+.bet-stepper .bet-amount {
+  min-width: 90px; padding: 8px 14px; border-radius: 10px; background: rgba(0,0,0,.3);
+  border: 1px solid var(--line-soft); font-family: var(--num); font-weight: 800; font-size: 18px;
+}
+
+/* --- Dock de acciones --- */
+.dock { flex: 0 0 auto; padding: 10px 10px calc(8px + env(safe-area-inset-bottom)); }
+.error-toast {
+  background: var(--danger-dark); border: 1px solid rgba(201,72,72,.5); color: #ff9d9d;
+  padding: 9px 12px; border-radius: 10px; font-size: 11px; margin-bottom: 8px;
+}
+.action-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; margin-bottom: 10px; }
+.action-btn {
+  padding: 10px 2px 9px; border: 0; border-radius: 12px; color: #fff;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  font-weight: 800; font-size: 9.5px; letter-spacing: .01em;
+}
+.action-btn .icon { font-size: 15px; font-weight: 900; line-height: 1; }
+.action-btn:disabled { opacity: .3; }
+.action-btn.double { background: var(--orange); }
+.action-btn.hit { background: var(--green); }
+.action-btn.stand { background: var(--danger); }
+.action-btn.split { background: var(--blue); }
+.action-btn.insurance { background: var(--purple); }
+
+.next-hand-btn {
+  width: 100%; padding: 14px; border: 0; border-radius: 12px; font-weight: 800; font-size: 15px;
+  background: var(--green-bright); color: #04110a; margin-bottom: 10px;
+}
+
+.summary-panel {
+  border: 1px solid var(--line-soft); border-radius: 14px; padding: 12px 6px;
+  display: grid; grid-template-columns: 1fr 1fr 1fr; text-align: center; margin-bottom: 8px;
+}
+.summary-panel .col { padding: 0 4px; }
+.summary-panel .col + .col { border-left: 1px solid var(--line-soft); }
+.summary-panel .s-label { font-size: 9px; font-weight: 800; letter-spacing: .05em; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
+.summary-panel .s-value { font-family: var(--num); font-weight: 800; font-size: 15px; }
+.summary-panel .s-value.green { color: var(--green-bright); }
+.summary-panel .s-sub { font-family: var(--num); font-size: 10px; color: var(--green-bright); margin-top: 2px; }
+
+.quick-bets { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+.quick-bets button {
+  padding: 9px 2px; border-radius: 10px; border: 1px solid rgba(79,208,122,.35);
+  background: transparent; color: var(--text); font-weight: 800; font-size: 11.5px;
+}
+.quick-bets button:disabled { opacity: .3; }
+
+/* --- Hoja modal (ajustes) --- */
+.sheet-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: flex-end; z-index: 20; }
+.sheet {
+  width: 100%; background: var(--panel-dark); border-top: 1px solid var(--line);
+  border-radius: 20px 20px 0 0; padding: 20px 18px calc(20px + env(safe-area-inset-bottom));
+  display: grid; gap: 12px;
+}
+.sheet h3 { margin: 0; font-size: 16px; }
+.sheet label { display: grid; gap: 6px; font-size: 12px; color: var(--muted); }
+.sheet input { padding: 12px 14px; background: #07100c; border: 1px solid var(--line); border-radius: 10px; color: var(--text); outline: none; }
+.sheet input:focus { border-color: var(--green-bright); }
+.sheet-actions { display: flex; gap: 8px; margin-top: 4px; }
+.sheet-actions button { flex: 1; padding: 12px; border-radius: 10px; border: 0; font-weight: 800; }
+.sheet-actions .confirm { background: var(--green-bright); color: #04110a; }
+.sheet-actions .cancel { background: transparent; border: 1px solid var(--line); color: var(--text); }
+
+.start-screen { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px; text-align: center; }
+.start-screen h1 { margin: 0; font-size: 24px; letter-spacing: -.02em; }
+.start-screen p { margin: 0; color: var(--muted); max-width: 300px; line-height: 1.5; font-size: 14px; }
+.start-screen button { padding: 14px 28px; border: 0; border-radius: 12px; background: var(--green-bright); color: #04110a; font-weight: 800; font-size: 15px; }
+
+@media (min-width: 640px) {
+  .table-screen { max-width: 480px; margin: 0 auto; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
+}

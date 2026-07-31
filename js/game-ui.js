@@ -1,6 +1,8 @@
-// game-ui.js — Capa de interfaz: conecta game.js (reglas) con el DOM y
-// game-repository.js (persistencia). No contiene lógica de juego ni de
-// base de datos — solo orquesta y renderiza.
+// game-ui.js — Motor de renderizado de la mesa (réplica del diseño de
+// referencia). Dibuja dentro de #tableRoot: fieltro con marca de agua,
+// casa, jugador, apuesta, dock de acciones y resumen. La tarjeta de
+// estadísticas y la barra del zapato viven en game.html/table-bootstrap.js,
+// que reciben los datos vía el callback onUpdate.
 
 import {
   createGame, dealInitialRound, availableActions, applyPlayerAction,
@@ -10,17 +12,16 @@ import {
 import { handValue } from './deck.js';
 import * as repo from './game-repository.js';
 
-const RESULT_LABELS = {
-  win: 'WIN', blackjack: 'WIN', loss: 'LOSE', push: 'PUSH',
-};
+const RESULT_LABELS = { win: 'WIN', blackjack: 'WIN', loss: 'LOSE', push: 'PUSH' };
 
 export class BlackjackTableController {
-  constructor({ root, playerName = '', initialBankroll = 500, minimumBet = 20, maximumBet = 2000 }) {
+  constructor({ root, playerName = '', initialBankroll = 1000, minimumBet = 20, maximumBet = 2000, onUpdate = () => {} }) {
     this.root = root;
     this.playerName = playerName;
+    this.onUpdate = onUpdate;
     this.game = createGame({ numDecks: 6 });
     this.bankroll = initialBankroll;
-    this.bankrollStart = initialBankroll; // fijo, para calcular % ganancia/pérdida acumulada
+    this.bankrollStart = initialBankroll;
     this.minimumBet = minimumBet;
     this.maximumBet = maximumBet;
     this.currentBet = minimumBet;
@@ -28,70 +29,45 @@ export class BlackjackTableController {
     this.currentShoeRow = null;
     this.hand = null;
     this.lastError = null;
-    this.lastHandResults = null; // se guarda para mostrar WIN/LOSE/PUSH junto a cada mano
-    this.editingLimits = false;
-    this.buyingChips = false;
+    this.lastHandResults = null;
+    this.sessionStartedAt = null;
+    this.decisionStartedAt = null;
+    this.responseTimes = [];
+    this.bestStreak = 0;
     this.sessionTotals = { totalHands: 0, correctDecisions: 0, incorrectDecisions: 0, totalProfit: 0, totalEvLoss: 0 };
   }
 
   async startSession() {
-    try {
-      this.session = await repo.createTrainingSession({
-        bankrollStart: this.bankroll,
-        minimumBet: this.minimumBet,
-        maximumBet: this.maximumBet,
-        gameMode: 'heads_up',
-      });
-    } catch (error) {
-      this.lastError = error?.message || String(error);
-      throw error;
-    }
+    this.session = await repo.createTrainingSession({
+      bankrollStart: this.bankroll, minimumBet: this.minimumBet, maximumBet: this.maximumBet, gameMode: 'heads_up',
+    });
+    this.sessionStartedAt = Date.now();
   }
 
   async ensureShoe() {
     if (shoeNeedsReplacement(this.game)) {
       if (this.game.shoe && this.currentShoeRow) {
         await repo.saveShoe({
-          id: this.currentShoeRow.id,
-          sessionId: this.session.id,
-          shoeNumber: this.game.shoeNumber,
-          shoe: this.game.shoe,
-          endedAt: new Date().toISOString(),
+          id: this.currentShoeRow.id, sessionId: this.session.id, shoeNumber: this.game.shoeNumber,
+          shoe: this.game.shoe, endedAt: new Date().toISOString(),
         });
       }
       startNewShoe(this.game);
-      this.currentShoeRow = await repo.saveShoe({
-        sessionId: this.session.id,
-        shoeNumber: this.game.shoeNumber,
-        shoe: this.game.shoe,
-      });
+      this.currentShoeRow = await repo.saveShoe({ sessionId: this.session.id, shoeNumber: this.game.shoeNumber, shoe: this.game.shoe });
     }
   }
 
-  /** Inicia una mano nueva: reparte, revisa blackjack natural, pregunta insurance si aplica. */
   async dealNewHand() {
     try {
       this.lastError = null;
       this.lastHandResults = null;
       await this.ensureShoe();
-      if (this.currentBet > this.bankroll) {
-        throw new Error('Saldo insuficiente para esta apuesta. Compra más fichas o baja tu apuesta.');
-      }
+      if (this.currentBet > this.bankroll) throw new Error('Saldo insuficiente. Compra más fichas o baja tu apuesta.');
 
       const previousBet = this.hand?.playerHands?.[0]?.bet ?? null;
-      this.hand = dealInitialRound(this.game, {
-        betAmount: this.currentBet,
-        bankrollBeforeHand: this.bankroll,
-        previousBetAmount: previousBet,
-      });
-
+      this.hand = dealInitialRound(this.game, { betAmount: this.currentBet, bankrollBeforeHand: this.bankroll, previousBetAmount: previousBet });
       this.render();
-
-      if (this.hand.naturalBlackjackResolved) {
-        await this.finishHand();
-      } else if (this.hand.insurance.offered) {
-        this.renderInsurancePrompt();
-      }
+      if (this.hand.naturalBlackjackResolved) await this.finishHand();
     } catch (error) {
       console.error('dealNewHand error:', error);
       this.lastError = error?.message || String(error);
@@ -99,7 +75,15 @@ export class BlackjackTableController {
     }
   }
 
+  markDecisionTime() {
+    if (this.decisionStartedAt !== null) {
+      this.responseTimes.push(Date.now() - this.decisionStartedAt);
+      this.decisionStartedAt = null;
+    }
+  }
+
   async decideInsurance(taken) {
+    this.markDecisionTime();
     const amount = taken ? this.currentBet / 2 : 0;
     resolveInsurance(this.hand, taken, amount);
     if (this.hand.playerHands.every(h => h.status === 'dealer_blackjack')) {
@@ -109,18 +93,23 @@ export class BlackjackTableController {
     }
   }
 
-  /** Llamado desde los botones Pedir/Plantarse/Doblar/Dividir. */
   async playerAction(action) {
     try {
+      // Si hay seguro pendiente de decidir, cualquier otra acción lo rechaza implícitamente primero.
+      if (this.hand.insurance?.offered && this.hand.insurance.taken === null) {
+        resolveInsurance(this.hand, false, 0);
+        if (this.hand.playerHands.every(h => h.status === 'dealer_blackjack')) {
+          this.markDecisionTime();
+          await this.finishHand();
+          return;
+        }
+      }
       const legal = availableActions(this.hand, this.bankroll - this.currentActiveHandsCommitted());
       if (!legal.includes(action)) return;
-
+      this.markDecisionTime();
       applyPlayerAction(this.game, this.hand, action);
       this.render();
-
-      if (allPlayerHandsResolved(this.hand)) {
-        await this.finishHand();
-      }
+      if (allPlayerHandsResolved(this.hand)) await this.finishHand();
     } catch (error) {
       console.error('playerAction error:', error);
       this.lastError = error?.message || String(error);
@@ -134,23 +123,14 @@ export class BlackjackTableController {
 
   async finishHand() {
     try {
-      if (!this.hand.naturalBlackjackResolved) {
-        playDealerHand(this.game, this.hand);
-      }
+      if (!this.hand.naturalBlackjackResolved) playDealerHand(this.game, this.hand);
       const { handResults, totalProfit } = resolveHandResults(this.hand);
-
       this.bankroll += totalProfit;
       updateStreak(this.game, totalProfit);
+      this.bestStreak = Math.max(this.bestStreak, this.game.currentStreak);
       this.lastHandResults = { handResults, totalProfit };
 
-      await repo.saveResolvedHand({
-        sessionId: this.session.id,
-        shoeId: this.currentShoeRow.id,
-        hand: this.hand,
-        handResults,
-        totalProfit,
-        seatNumber: 1,
-      });
+      await repo.saveResolvedHand({ sessionId: this.session.id, shoeId: this.currentShoeRow.id, hand: this.hand, handResults, totalProfit, seatNumber: 1 });
 
       this.sessionTotals.totalHands += 1;
       this.sessionTotals.correctDecisions += this.hand.decisions.filter(d => d.isCorrect).length;
@@ -171,22 +151,18 @@ export class BlackjackTableController {
     if (this.session) await repo.endTrainingSession(this.session.id, this.bankroll);
   }
 
-  /** Compra simulada de fichas: aumenta el bankroll. No afecta bankroll_start (para no distorsionar el % de ganancia/pérdida real de juego). */
   buyChips(amount) {
     if (!amount || amount <= 0) return;
     this.bankroll += amount;
-    this.bankrollStart += amount; // el "capital aportado" también sube, así el % refleja rendimiento de juego, no la compra
-    this.buyingChips = false;
+    this.bankrollStart += amount;
     this.render();
   }
 
-  /** Cambia los límites de la mesa. Ajusta la apuesta actual si queda fuera de rango. */
   setTableLimits(minBet, maxBet) {
     if (minBet <= 0 || maxBet < minBet) return;
     this.minimumBet = minBet;
     this.maximumBet = maxBet;
     this.currentBet = Math.min(Math.max(this.currentBet, minBet), maxBet);
-    this.editingLimits = false;
     this.render();
   }
 
@@ -197,7 +173,12 @@ export class BlackjackTableController {
     this.render();
   }
 
-  // --- Métricas derivadas para el panel ---
+  setBetPercentOfBankroll(pct) {
+    const raw = Math.round((this.bankroll * pct) / 5) * 5; // redondeado a múltiplos de 5
+    const clamped = Math.min(Math.max(raw, this.minimumBet), Math.min(this.maximumBet, this.bankroll));
+    this.currentBet = clamped;
+    this.render();
+  }
 
   profitPct() {
     if (this.bankrollStart <= 0) return 0;
@@ -211,180 +192,159 @@ export class BlackjackTableController {
     return Math.round((remaining / shoe.cutCardPosition) * 1000) / 10;
   }
 
-  // --- Renderizado. Ajustar clases CSS a la identidad visual real del proyecto. ---
+  avgResponseSeconds() {
+    if (this.responseTimes.length === 0) return null;
+    const avgMs = this.responseTimes.reduce((a, b) => a + b, 0) / this.responseTimes.length;
+    return Math.round((avgMs / 1000) * 10) / 10;
+  }
+
+  // --- Renderizado ---
 
   render() {
     if (!this.root) return;
 
     const resolved = this.hand ? allPlayerHandsResolved(this.hand) : true;
+    if (this.hand && !resolved && !this.hand.naturalBlackjackResolved && this.decisionStartedAt === null) {
+      this.decisionStartedAt = Date.now();
+    }
+
     const dealerVisible = this.hand
       ? (this.hand.naturalBlackjackResolved ? this.hand.dealerCards : (resolved ? this.hand.dealerCards : [this.hand.dealerCards[0]]))
       : [];
-
-    const legal = (this.hand && !this.hand.naturalBlackjackResolved)
+    const insurancePending = Boolean(this.hand?.insurance?.offered && this.hand.insurance.taken === null);
+    const legal = (this.hand && !this.hand.naturalBlackjackResolved && !insurancePending)
       ? availableActions(this.hand, this.bankroll - this.currentActiveHandsCommitted())
       : [];
 
-    const shoe = this.game.shoe;
-    const cardsRemaining = shoe ? shoe.totalCards - shoe.dealtSequence.length : 0;
-    const pctPlayed = shoe ? Math.round((shoe.dealtSequence.length / shoe.totalCards) * 1000) / 10 : 0;
-    const cutPct = shoe ? shoe.penetrationPct : 0;
-    const remainingPct = this.shoeRemainingPct();
-
     const streak = this.game.currentStreak;
-    const streakBadge = streak !== 0
-      ? `<span class="streak-badge ${streak > 0 ? 'positive' : 'negative'}">Racha ${streak > 0 ? '+' : ''}${streak} ${streak > 0 ? '↑' : '↓'}</span>`
-      : '';
-
-    const profitPct = this.profitPct();
-    const profitBadge = `<span class="profit-badge ${profitPct > 0 ? 'positive' : profitPct < 0 ? 'negative' : 'neutral'}">Ganancia/pérdida: ${profitPct > 0 ? '+' : ''}${profitPct}% ${profitPct > 0 ? '↑' : profitPct < 0 ? '↓' : ''}</span>`;
-
     const dealerTotal = dealerVisible.length ? handValue(dealerVisible).total : 0;
     const results = this.lastHandResults?.handResults ?? null;
+    const activeHand = this.hand ? (this.hand.playerHands[this.hand.activeHandIndex] ?? this.hand.playerHands[0]) : null;
+    const profitPct = this.profitPct();
 
-    this.root.innerHTML = `
-      <div class="table-mesa">
-        <h3>Mesa${this.playerName ? ` — ${this.escapeHtml(this.playerName)}` : ''}</h3>
-        ${this.editingLimits ? `
-          <div class="limits-editor">
-            <label>Mínimo <input id="minBetInput" type="number" min="1" step="1" value="${this.minimumBet}"></label>
-            <label>Máximo <input id="maxBetInput" type="number" min="1" step="1" value="${this.maximumBet}"></label>
-            <button data-save-limits type="button">Guardar</button>
-            <button data-cancel-limits type="button">Cancelar</button>
-          </div>
-        ` : `
-          <p class="mesa-limites">
-            Límites: $${this.minimumBet.toFixed(2)} mínimo · $${this.maximumBet.toFixed(2)} máximo
-            <button data-edit-limits type="button" class="text-button">Cambiar límites</button>
-          </p>
-        `}
-        ${this.buyingChips ? `
-          <div class="chips-editor">
-            <label>Monto a comprar <input id="buyChipsInput" type="number" min="1" step="10" value="100"></label>
-            <button data-confirm-buy type="button">Confirmar compra</button>
-            <button data-cancel-buy type="button">Cancelar</button>
-          </div>
-        ` : `
-          <button data-buy-chips type="button" class="text-button">Comprar fichas</button>
-        `}
-        <div class="stats-line">
-          ${profitBadge}
-          <span class="shoe-count">Zapatos jugados: ${this.game.shoeNumber}</span>
-          <span class="shoe-remaining">Manos restantes en este zapato: ${remainingPct}%</span>
-        </div>
-        ${this.lastError ? `<div class="error-banner">Error interno: ${this.escapeHtml(this.lastError)}</div>` : ''}
+    this.root.innerHTML = this.hand ? `
+      <div class="felt-watermark">
+        <div class="fw-title">BLACKJACK</div>
+        <div class="fw-sub">PAGA 3 A 2</div>
+        <div class="fw-rules">EL DEALER PIDE EN 16 Y SE PLANTA EN 17<br>EL SEGURO PAGA 2 A 1</div>
       </div>
 
-      ${this.hand ? `
-        <div class="table-dealer">
-          <div class="dealer-header">
-            <h3>Casa</h3>
-            <span class="shoe-info">Zapato ${this.game.shoeNumber} · ${cardsRemaining} cartas restantes · ${pctPlayed}% jugado · corte al ${cutPct}%</span>
-            <span class="hand-total">Total: ${dealerTotal}</span>
-          </div>
-          <div class="cards">${this.renderCards(dealerVisible)}</div>
+      <div class="seat">
+        <div class="seat-label">Dealer</div>
+        <div class="seat-row">
+          <div class="card-row">${this.renderCards(dealerVisible)}</div>
+          <div class="total-pill">${dealerTotal}</div>
         </div>
+      </div>
 
-        <div class="table-player">
-          <div class="player-header">
-            <h3>Jugador</h3>
-            ${streakBadge}
-            <span class="hand-total">Total: ${handValue(this.hand.playerHands[this.hand.activeHandIndex]?.cards ?? this.hand.playerHands[0].cards).total}</span>
-          </div>
-          ${this.hand.playerHands.map((h, i) => {
-            const r = results ? results[i] : null;
-            const resultClass = r ? r.result : '';
-            const resultLabel = r ? (RESULT_LABELS[r.result] || r.result.toUpperCase()) : '';
-            return `
-              <div class="hand ${i === this.hand.activeHandIndex ? 'active' : ''} ${resultClass}">
-                <div class="cards">${this.renderCards(h.cards)}</div>
-                ${resultLabel ? `<div class="result-label">${resultLabel}</div>` : ''}
+      <div class="mid-stats">
+        ${streak !== 0 ? `<span class="pill ${streak > 0 ? 'positive' : 'negative'}">Racha ${streak > 0 ? '+' : ''}${streak} ${streak > 0 ? '↑' : '↓'}</span>` : ''}
+        <span class="pill ${profitPct > 0 ? 'positive' : profitPct < 0 ? 'negative' : ''}">${profitPct > 0 ? '+' : ''}${profitPct}% ${profitPct > 0 ? '↑' : profitPct < 0 ? '↓' : ''}</span>
+      </div>
+
+      <div class="seat">
+        <div class="seat-label">Tú</div>
+        ${this.hand.playerHands.map((h, i) => {
+          const r = results ? results[i] : null;
+          const cls = r ? r.result : (i === this.hand.activeHandIndex ? 'active' : '');
+          return `
+            <div class="hand-slot ${cls}">
+              <div class="seat-row">
+                <div class="card-row">${this.renderCards(h.cards)}</div>
+                <div class="total-pill">${handValue(h.cards).total}</div>
               </div>
-            `;
-          }).join('')}
+              ${r ? `<div class="result-overlay"><span class="result-word ${r.result}">${RESULT_LABELS[r.result] || r.result.toUpperCase()}</span><span class="result-amount">${r.profit > 0 ? '+' : ''}$${r.profit.toFixed(2)}</span></div>` : ''}
+            </div>
+          `;
+        }).join('')}
+      </div>
+
+      <div class="bet-section">
+        <div class="bet-label">Apuesta${insurancePending ? ' · seguro pendiente' : ''}</div>
+        <div class="bet-stepper">
+          <button class="step-btn" data-bet-delta="-10" type="button" ${resolved ? '' : 'disabled'}>−</button>
+          <span class="bet-amount">${this.currentBet}</span>
+          <button class="step-btn" data-bet-delta="10" type="button" ${resolved ? '' : 'disabled'}>+</button>
+        </div>
+        ${insurancePending ? `<button data-decline-insurance type="button" class="step-btn" style="margin-top:8px;width:auto;padding:0 14px;font-size:11px;">Rechazar seguro</button>` : ''}
+      </div>
+
+      <div class="dock">
+        ${this.lastError ? `<div class="error-toast">${this.escapeHtml(this.lastError)}</div>` : ''}
+
+        ${resolved && this.lastHandResults ? `<button class="next-hand-btn" data-next-hand type="button">Siguiente mano</button>` : `
+          <div class="action-row">
+            <button class="action-btn double" data-action="double" ${legal.includes('double') ? '' : 'disabled'}><span class="icon">2x</span>DOBLAR</button>
+            <button class="action-btn hit" data-action="hit" ${legal.includes('hit') ? '' : 'disabled'}><span class="icon">＋</span>PEDIR</button>
+            <button class="action-btn stand" data-action="stand" ${legal.includes('stand') ? '' : 'disabled'}><span class="icon">−</span>PLANTARSE</button>
+            <button class="action-btn split" data-action="split" ${legal.includes('split') ? '' : 'disabled'}><span class="icon">⇄</span>DIVIDIR</button>
+            <button class="action-btn insurance" data-take-insurance type="button" ${insurancePending ? '' : 'disabled'}><span class="icon">🛡</span>SEGURO</button>
+          </div>
+        `}
+
+        <div class="summary-panel">
+          <div class="col"><div class="s-label">Saldo</div><div class="s-value">$${this.bankroll.toFixed(2)}</div></div>
+          <div class="col"><div class="s-label">Apuesta actual</div><div class="s-value">$${this.currentBet.toFixed(2)}</div></div>
+          <div class="col">
+            <div class="s-label">Rendimiento</div>
+            <div class="s-value green">${profitPct > 0 ? '+' : ''}${profitPct}%</div>
+            <div class="s-sub">${(this.bankroll - this.bankrollStart) >= 0 ? '+' : ''}$${(this.bankroll - this.bankrollStart).toFixed(2)}</div>
+          </div>
         </div>
 
-        <div class="bet-controls">
-          <span>Apuesta próxima mano: $${this.currentBet}</span>
-          <button data-bet-delta="-5" type="button" ${resolved ? '' : 'disabled'}>-5</button>
-          <button data-bet-delta="5" type="button" ${resolved ? '' : 'disabled'}>+5</button>
-          <button data-bet-delta="-25" type="button" ${resolved ? '' : 'disabled'}>-25</button>
-          <button data-bet-delta="25" type="button" ${resolved ? '' : 'disabled'}>+25</button>
+        <div class="quick-bets">
+          <button data-bet-delta="-10" type="button" ${resolved ? '' : 'disabled'}>-10</button>
+          <button data-bet-delta="-1" type="button" ${resolved ? '' : 'disabled'}>-1</button>
+          <button data-bet-pct="0.5" type="button" ${resolved ? '' : 'disabled'}>50%</button>
+          <button data-bet-delta="1" type="button" ${resolved ? '' : 'disabled'}>+1</button>
+          <button data-bet-delta="10" type="button" ${resolved ? '' : 'disabled'}>+10</button>
         </div>
-
-        <div class="actions">
-          ${['hit','stand','double','split'].map(a => `
-            <button data-action="${a}" ${legal.includes(a) ? '' : 'disabled'}>${a.toUpperCase()}</button>
-          `).join('')}
-          ${resolved && this.lastHandResults ? `<button data-next-hand type="button" class="primary">Siguiente mano</button>` : ''}
-        </div>
-      ` : ''}
-
-      <div class="bankroll">Saldo: $${this.bankroll.toFixed(2)}</div>
-    `;
+      </div>
+    ` : '';
 
     this.wireEvents();
+    this.emitUpdate();
+  }
+
+  emitUpdate() {
+    const shoe = this.game.shoe;
+    const totalDecisions = this.sessionTotals.correctDecisions + this.sessionTotals.incorrectDecisions;
+    const precisionPct = totalDecisions > 0 ? Math.round((this.sessionTotals.correctDecisions / totalDecisions) * 100) : null;
+    const elapsedMin = this.sessionStartedAt ? Math.max(1, Math.round((Date.now() - this.sessionStartedAt) / 60000)) : 0;
+
+    this.onUpdate({
+      shoeNumber: this.game.shoeNumber,
+      cardsRemaining: shoe ? shoe.totalCards - shoe.dealtSequence.length : 0,
+      pctPlayed: shoe ? Math.round((shoe.dealtSequence.length / shoe.totalCards) * 1000) / 10 : 0,
+      cutPct: shoe ? shoe.penetrationPct : 0,
+      handNumberInShoe: this.hand ? this.hand.handNumberInShoe : 0,
+      precisionPct, correctDecisions: this.sessionTotals.correctDecisions, totalDecisions,
+      avgResponseSec: this.avgResponseSeconds(),
+      streak: this.game.currentStreak, bestStreak: this.bestStreak,
+      elapsedMin, handsThisSession: this.sessionTotals.totalHands,
+    });
   }
 
   wireEvents() {
-    this.root.querySelectorAll('[data-action]').forEach(btn => {
-      btn.addEventListener('click', () => this.playerAction(btn.dataset.action));
-    });
+    this.root.querySelectorAll('[data-action]').forEach(btn => btn.addEventListener('click', () => this.playerAction(btn.dataset.action)));
     const nextBtn = this.root.querySelector('[data-next-hand]');
     if (nextBtn) nextBtn.addEventListener('click', () => this.dealNewHand());
-    this.root.querySelectorAll('[data-bet-delta]').forEach(btn => {
-      btn.addEventListener('click', () => this.adjustBet(Number(btn.dataset.betDelta)));
-    });
-
-    const editLimitsBtn = this.root.querySelector('[data-edit-limits]');
-    if (editLimitsBtn) editLimitsBtn.addEventListener('click', () => { this.editingLimits = true; this.render(); });
-    const cancelLimitsBtn = this.root.querySelector('[data-cancel-limits]');
-    if (cancelLimitsBtn) cancelLimitsBtn.addEventListener('click', () => { this.editingLimits = false; this.render(); });
-    const saveLimitsBtn = this.root.querySelector('[data-save-limits]');
-    if (saveLimitsBtn) saveLimitsBtn.addEventListener('click', () => {
-      const min = Number(this.root.querySelector('#minBetInput').value);
-      const max = Number(this.root.querySelector('#maxBetInput').value);
-      this.setTableLimits(min, max);
-    });
-
-    const buyChipsBtn = this.root.querySelector('[data-buy-chips]');
-    if (buyChipsBtn) buyChipsBtn.addEventListener('click', () => { this.buyingChips = true; this.render(); });
-    const cancelBuyBtn = this.root.querySelector('[data-cancel-buy]');
-    if (cancelBuyBtn) cancelBuyBtn.addEventListener('click', () => { this.buyingChips = false; this.render(); });
-    const confirmBuyBtn = this.root.querySelector('[data-confirm-buy]');
-    if (confirmBuyBtn) confirmBuyBtn.addEventListener('click', () => {
-      const amount = Number(this.root.querySelector('#buyChipsInput').value);
-      this.buyChips(amount);
-    });
+    this.root.querySelectorAll('[data-bet-delta]').forEach(btn => btn.addEventListener('click', () => this.adjustBet(Number(btn.dataset.betDelta))));
+    const pctBtn = this.root.querySelector('[data-bet-pct]');
+    if (pctBtn) pctBtn.addEventListener('click', () => this.setBetPercentOfBankroll(Number(pctBtn.dataset.betPct)));
+    const insBtn = this.root.querySelector('[data-take-insurance]');
+    if (insBtn) insBtn.addEventListener('click', () => this.decideInsurance(true));
+    const declineBtn = this.root.querySelector('[data-decline-insurance]');
+    if (declineBtn) declineBtn.addEventListener('click', () => this.decideInsurance(false));
   }
 
   renderCards(cards) {
-    return cards.map(c => `<span class="card ${['♥','♦'].includes(c.suit) ? 'red' : 'black'}">${c.rank}${c.suit}</span>`).join(' ');
+    return cards.map(c => `<div class="card ${['♥','♦'].includes(c.suit) ? 'red' : ''}"><span>${c.rank}</span><span class="suit">${c.suit}</span></div>`).join('');
   }
 
   escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
-  }
-
-  renderInsurancePrompt() {
-    if (!this.root) return;
-    const prompt = document.createElement('div');
-    prompt.className = 'insurance-prompt';
-    prompt.innerHTML = `
-      <p>La casa muestra As — ¿Insurance por $${(this.currentBet / 2).toFixed(2)}?</p>
-      <button data-insurance="yes">Sí</button>
-      <button data-insurance="no">No</button>
-    `;
-    this.root.appendChild(prompt);
-    prompt.querySelector('[data-insurance="yes"]').addEventListener('click', () => {
-      prompt.remove();
-      this.decideInsurance(true);
-    });
-    prompt.querySelector('[data-insurance="no"]').addEventListener('click', () => {
-      prompt.remove();
-      this.decideInsurance(false);
-    });
   }
 }
