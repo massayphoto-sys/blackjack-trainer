@@ -13,6 +13,8 @@ const startButton = document.getElementById('startSessionButton');
 const tableRoot = document.getElementById('tableRoot');
 const playerNameLabel = document.getElementById('playerNameLabel');
 const signOutButton = document.getElementById('signOutButton');
+const buyChipsButton = document.getElementById('buyChipsButton');
+const limitsButton = document.getElementById('limitsButton');
 
 const statsCard = document.getElementById('statsCard');
 const statPrecision = document.getElementById('statPrecision');
@@ -107,8 +109,6 @@ async function handleStart() {
       minimumBet: 20,
       maximumBet: 2000,
       onUpdate: handleUpdate,
-      onBuyChipsClick: openBuyChipsSheet,
-      onLimitsClick: openLimitsSheet,
     });
     await controller.startSession();
     startScreen.remove();
@@ -122,6 +122,8 @@ async function handleStart() {
 }
 
 if (startButton) startButton.addEventListener('click', handleStart);
+if (buyChipsButton) buyChipsButton.addEventListener('click', openBuyChipsSheet);
+if (limitsButton) limitsButton.addEventListener('click', openLimitsSheet);
 
 if (signOutButton) {
   signOutButton.addEventListener('click', async () => {

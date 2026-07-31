@@ -15,12 +15,10 @@ import * as repo from './game-repository.js';
 const RESULT_LABELS = { win: 'WIN', blackjack: 'WIN', loss: 'LOSE', push: 'PUSH' };
 
 export class BlackjackTableController {
-  constructor({ root, playerName = '', initialBankroll = 1000, minimumBet = 20, maximumBet = 2000, onUpdate = () => {}, onBuyChipsClick = () => {}, onLimitsClick = () => {} }) {
+  constructor({ root, playerName = '', initialBankroll = 1000, minimumBet = 20, maximumBet = 2000, onUpdate = () => {} }) {
     this.root = root;
     this.playerName = playerName;
     this.onUpdate = onUpdate;
-    this.onBuyChipsClick = onBuyChipsClick;
-    this.onLimitsClick = onLimitsClick;
     this.game = createGame({ numDecks: 6 });
     this.bankroll = initialBankroll;
     this.bankrollStart = initialBankroll;
@@ -270,15 +268,6 @@ export class BlackjackTableController {
         }).join('')}
       </div>
 
-      <div class="bet-section">
-        <div class="bet-label">Apuesta</div>
-        <div class="bet-stepper">
-          <button class="step-btn" data-bet-delta="-10" type="button" ${resolved ? '' : 'disabled'}>−</button>
-          <span class="bet-amount">${this.currentBet}</span>
-          <button class="step-btn" data-bet-delta="10" type="button" ${resolved ? '' : 'disabled'}>+</button>
-        </div>
-      </div>
-
       <div class="dock">
         ${this.lastError ? `<div class="error-toast">${this.escapeHtml(this.lastError)}</div>` : ''}
 
@@ -310,10 +299,6 @@ export class BlackjackTableController {
           <button data-bet-delta="10" type="button" ${resolved ? '' : 'disabled'}>+10</button>
         </div>
 
-        <div class="util-row">
-          <button data-open-chips type="button">+ Comprar fichas</button>
-          <button data-open-limits type="button">Cambiar límites</button>
-        </div>
       </div>
     ` : '';
 
@@ -347,10 +332,6 @@ export class BlackjackTableController {
     this.root.querySelectorAll('[data-bet-delta]').forEach(btn => btn.addEventListener('click', () => this.adjustBet(Number(btn.dataset.betDelta))));
     const pctBtn = this.root.querySelector('[data-bet-pct]');
     if (pctBtn) pctBtn.addEventListener('click', () => this.setBetPercentOfBankroll(Number(pctBtn.dataset.betPct)));
-    const chipsBtn = this.root.querySelector('[data-open-chips]');
-    if (chipsBtn) chipsBtn.addEventListener('click', () => this.onBuyChipsClick());
-    const limitsBtn = this.root.querySelector('[data-open-limits]');
-    if (limitsBtn) limitsBtn.addEventListener('click', () => this.onLimitsClick());
   }
 
   renderCards(cards) {
