@@ -14,7 +14,7 @@
   <link rel="apple-touch-icon" href="/icon-192.png">
 
   <meta charset="utf-8">
-<title>Blackjack Trainer v7.0</title>
+<title>Blackjack Trainer v8.0</title>
   <style>
     :root{
       --bg:#f3f4f1;--panel:#ffffff;--text:#181a18;--muted:#6b716d;--border:#d9ddd9;
@@ -194,6 +194,26 @@
       .v7-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
     }
 
+
+    /* v8.0 · Supabase authentication */
+    .auth-shell{max-width:1180px;margin:14px auto 0;padding:0 22px}
+    .auth-panel{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 14px;border:1px solid var(--border);border-radius:14px;background:#fff}
+    .auth-copy{min-width:0}
+    .auth-copy strong{display:block}
+    .auth-copy span{display:block;margin-top:3px;color:var(--muted);font-size:13px;overflow-wrap:anywhere}
+    .auth-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .auth-actions input{width:min(320px,70vw)}
+    .auth-message{font-size:13px;color:var(--muted)}
+    .auth-message.error{color:var(--danger)}
+    .auth-message.success{color:var(--good)}
+    @media(max-width:720px){
+      .auth-shell{padding:0 12px}
+      .auth-panel{align-items:stretch;flex-direction:column}
+      .auth-actions{width:100%}
+      .auth-actions input{width:100%}
+      .auth-actions button{flex:1}
+    }
+
 </style>
 </head>
 <body>
@@ -223,6 +243,23 @@
 </section>
 
   <div>Cargando Blackjack Trainer…</div>
+</div>
+
+<div class="auth-shell">
+  <section class="auth-panel" aria-label="Acceso de usuario">
+    <div class="auth-copy">
+      <strong id="authTitle">Blackjack Trainer Cloud</strong>
+      <span id="authStatus">Inicia sesión por correo para conectar este dispositivo con Supabase.</span>
+    </div>
+    <div id="authSignedOut" class="auth-actions">
+      <input id="authEmail" type="email" autocomplete="email" placeholder="correo@ejemplo.com" aria-label="Correo electrónico">
+      <button id="authMagicLinkBtn" class="primary" type="button">Enviar enlace de acceso</button>
+    </div>
+    <div id="authSignedIn" class="auth-actions" hidden>
+      <span id="authUserEmail" class="auth-message"></span>
+      <button id="authSignOutBtn" type="button">Cerrar sesión</button>
+    </div>
+  </section>
 </div>
 
 <div class="wrap">
@@ -440,6 +477,128 @@
     </div>
   </div>
 </dialog>
+
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function(){
+  'use strict';
+
+  const SUPABASE_URL = 'https://cnrmmnndxtjhaboqxhil.supabase.co';
+  const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_O1umLqsF6m11SoVS14aN6w_aiyqQw5t';
+
+  const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true
+    }
+  });
+
+  window.blackjackSupabase = client;
+
+  const byId = (id) => document.getElementById(id);
+
+  function setAuthMessage(message, type=''){
+    const status = byId('authStatus');
+    if(!status) return;
+    status.textContent = message;
+    status.className = type ? `auth-message ${type}` : '';
+  }
+
+  function renderAuth(session){
+    const signedOut = byId('authSignedOut');
+    const signedIn = byId('authSignedIn');
+    const userEmail = byId('authUserEmail');
+
+    if(session?.user){
+      if(signedOut) signedOut.hidden = true;
+      if(signedIn) signedIn.hidden = false;
+      if(userEmail) userEmail.textContent = session.user.email || 'Usuario autenticado';
+      setAuthMessage('Sesión conectada con Supabase.', 'success');
+      document.documentElement.dataset.authenticated = 'true';
+    }else{
+      if(signedOut) signedOut.hidden = false;
+      if(signedIn) signedIn.hidden = true;
+      if(userEmail) userEmail.textContent = '';
+      setAuthMessage('Inicia sesión por correo para conectar este dispositivo con Supabase.');
+      document.documentElement.dataset.authenticated = 'false';
+    }
+  }
+
+  async function sendMagicLink(){
+    const emailInput = byId('authEmail');
+    const button = byId('authMagicLinkBtn');
+    const email = emailInput?.value?.trim();
+
+    if(!email){
+      setAuthMessage('Escribe un correo electrónico válido.', 'error');
+      emailInput?.focus();
+      return;
+    }
+
+    if(button) button.disabled = true;
+    setAuthMessage('Enviando enlace de acceso…');
+
+    const redirectTo = location.protocol === 'file:'
+      ? undefined
+      : `${location.origin}${location.pathname}`;
+
+    const { error } = await client.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: redirectTo,
+        shouldCreateUser: true
+      }
+    });
+
+    if(button) button.disabled = false;
+
+    if(error){
+      console.error('Supabase auth error:', error);
+      setAuthMessage(`No se pudo enviar el enlace: ${error.message}`, 'error');
+      return;
+    }
+
+    setAuthMessage('Revisa tu correo. El enlace de acceso fue enviado.', 'success');
+  }
+
+  async function signOut(){
+    const button = byId('authSignOutBtn');
+    if(button) button.disabled = true;
+    const { error } = await client.auth.signOut();
+    if(button) button.disabled = false;
+    if(error){
+      setAuthMessage(`No se pudo cerrar la sesión: ${error.message}`, 'error');
+    }
+  }
+
+  async function initAuth(){
+    byId('authMagicLinkBtn')?.addEventListener('click', sendMagicLink);
+    byId('authEmail')?.addEventListener('keydown', (event) => {
+      if(event.key === 'Enter') sendMagicLink();
+    });
+    byId('authSignOutBtn')?.addEventListener('click', signOut);
+
+    const { data, error } = await client.auth.getSession();
+    if(error){
+      console.error('Supabase session error:', error);
+      setAuthMessage(`No se pudo comprobar la sesión: ${error.message}`, 'error');
+    }
+    renderAuth(data?.session || null);
+
+    client.auth.onAuthStateChange((_event, session) => {
+      renderAuth(session);
+    });
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', initAuth, { once:true });
+  }else{
+    initAuth();
+  }
+})();
+</script>
 
 <script>
 const suits=[['♥',1],['♦',1],['♣',0],['♠',0]],ranks=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
@@ -2902,6 +3061,6 @@ else start();
 })();
 </script>
 
-<div class="web-version-badge">v7.0 · Data Integrity Foundation</div>
+<div class="web-version-badge">v8.0 · Supabase Authentication</div>
 </body>
 </html>
