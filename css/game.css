@@ -154,14 +154,19 @@ button { cursor: pointer; }
 .felt-watermark .fw-sub { font-size: 10px; font-weight: 700; letter-spacing: .12em; margin-top: 2px; }
 .felt-watermark .fw-rules { font-size: 8px; letter-spacing: .06em; margin-top: 6px; line-height: 1.6; }
 
+.seats-row { display: flex; flex-direction: row-reverse; justify-content: center; align-items: flex-start; gap: 18px; flex-wrap: wrap; }
 .seat { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .seat-label { font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: #cfe3d5; display: flex; align-items: center; justify-content: center; gap: 8px; }
-.seat2-toggle {
-  font-size: 9px; font-weight: 800; letter-spacing: 0; text-transform: none;
-  padding: 4px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,.2);
-  background: rgba(255,255,255,.04); color: var(--text); cursor: pointer;
+
+.seat-count-picker {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin-bottom: 8px; font-size: 11px; color: var(--muted);
 }
-.seat2-toggle:disabled { opacity: .4; cursor: not-allowed; }
+.seat-count-btn {
+  padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,.2);
+  background: rgba(255,255,255,.04); color: var(--text); font-weight: 700; font-size: 12px; cursor: pointer;
+}
+.seat-count-btn.selected { background: var(--green-bright); color: #04110a; border-color: var(--green-bright); }
 .seat-row { display: flex; align-items: center; gap: 10px; justify-content: center; }
 .hands-row { display: flex; flex-direction: row-reverse; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .hand-slot-label { font-size: 9px; font-weight: 800; letter-spacing: .05em; color: var(--muted); text-align: center; margin-bottom: 3px; text-transform: uppercase; }

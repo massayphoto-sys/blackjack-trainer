@@ -88,11 +88,9 @@ export class BlackjackTableController {
     }
   }
 
-  /** Puede abrir/cerrar el puesto 2 solo cuando no hay una mano en curso. */
-  toggleSeat2() {
-    const resolved = !this.hand || allPlayerHandsResolved(this.hand);
-    if (!resolved) return;
-    this.seat2Open = !this.seat2Open;
+  /** Elige 1 o 2 puestos para la PRÓXIMA mano — solo aparece cuando no hay mano en curso. */
+  setSeatCount(count) {
+    this.seat2Open = count === 2;
     if (!this.seat2Open) this.hand2 = null;
     this.render();
   }
@@ -395,67 +393,73 @@ export class BlackjackTableController {
         </div>
       </div>
 
-      <div class="seat">
-        <div class="seat-label">
-          Tú
-          <button class="seat2-toggle" data-toggle-seat2 type="button" ${!resolved ? 'disabled' : ''}>${this.seat2Open ? 'Cerrar puesto 2' : '+ Puesto 2'}</button>
-        </div>
-        <div class="hands-row">
-          ${this.hand.playerHands.map((h, i) => {
-            const r = results ? results[i] : null;
-            const cls = r ? r.result : (i === this.hand.activeHandIndex && activeTarget === 'hand' ? 'active' : '');
-            return `
-              <div class="hand-slot ${cls}">
-                ${this.hand.playerHands.length > 1 ? `<div class="hand-slot-label">Jugada ${i + 1}</div>` : ''}
-                <div class="seat-row">
-                  <div class="card-row">${this.renderCards(h.cards)}</div>
-                  <div class="total-pill">${handValue(h.cards).total}</div>
-                </div>
-                ${r ? `<div class="result-overlay">
-                  <span class="result-word ${r.result}">${RESULT_LABELS[r.result] || r.result.toUpperCase()}</span>
-                  <span class="result-amount">${r.profit > 0 ? '+' : ''}$${r.profit.toFixed(2)}</span>
-                  ${insuranceProfit !== 0 ? `
-                    <span class="result-insurance">Seguro: ${insuranceProfit > 0 ? '+' : ''}$${insuranceProfit.toFixed(2)}</span>
-                    <span class="result-net">Neto: ${(r.profit + insuranceProfit) > 0 ? '+' : ''}$${(r.profit + insuranceProfit).toFixed(2)}</span>
-                  ` : ''}
-                </div>` : ''}
-              </div>
-            `;
-          }).join('')}
-        </div>
-      </div>
-
-      ${this.seat2Open && this.hand2 ? `
+      <div class="seats-row">
         <div class="seat">
-          <div class="seat-label">Puesto 2</div>
+          <div class="seat-label">${this.seat2Open ? 'Puesto 1' : 'Tú'}</div>
           <div class="hands-row">
-            ${this.hand2.playerHands.map((h, i) => {
-              const r2 = results2 ? results2[i] : null;
-              const cls = r2 ? r2.result : (i === this.hand2.activeHandIndex && activeTarget === 'hand2' ? 'active' : '');
+            ${this.hand.playerHands.map((h, i) => {
+              const r = results ? results[i] : null;
+              const cls = r ? r.result : (i === this.hand.activeHandIndex && activeTarget === 'hand' ? 'active' : '');
               return `
                 <div class="hand-slot ${cls}">
-                  ${this.hand2.playerHands.length > 1 ? `<div class="hand-slot-label">Jugada ${i + 1}</div>` : ''}
+                  ${this.hand.playerHands.length > 1 ? `<div class="hand-slot-label">Jugada ${i + 1}</div>` : ''}
                   <div class="seat-row">
                     <div class="card-row">${this.renderCards(h.cards)}</div>
                     <div class="total-pill">${handValue(h.cards).total}</div>
                   </div>
-                  ${r2 ? `<div class="result-overlay">
-                    <span class="result-word ${r2.result}">${RESULT_LABELS[r2.result] || r2.result.toUpperCase()}</span>
-                    <span class="result-amount">${r2.profit > 0 ? '+' : ''}$${r2.profit.toFixed(2)}</span>
+                  ${r ? `<div class="result-overlay">
+                    <span class="result-word ${r.result}">${RESULT_LABELS[r.result] || r.result.toUpperCase()}</span>
+                    <span class="result-amount">${r.profit > 0 ? '+' : ''}$${r.profit.toFixed(2)}</span>
+                    ${insuranceProfit !== 0 ? `
+                      <span class="result-insurance">Seguro: ${insuranceProfit > 0 ? '+' : ''}$${insuranceProfit.toFixed(2)}</span>
+                      <span class="result-net">Neto: ${(r.profit + insuranceProfit) > 0 ? '+' : ''}$${(r.profit + insuranceProfit).toFixed(2)}</span>
+                    ` : ''}
                   </div>` : ''}
                 </div>
               `;
             }).join('')}
           </div>
         </div>
-      ` : ''}
+
+        ${this.seat2Open && this.hand2 ? `
+          <div class="seat">
+            <div class="seat-label">Puesto 2</div>
+            <div class="hands-row">
+              ${this.hand2.playerHands.map((h, i) => {
+                const r2 = results2 ? results2[i] : null;
+                const cls = r2 ? r2.result : (i === this.hand2.activeHandIndex && activeTarget === 'hand2' ? 'active' : '');
+                return `
+                  <div class="hand-slot ${cls}">
+                    ${this.hand2.playerHands.length > 1 ? `<div class="hand-slot-label">Jugada ${i + 1}</div>` : ''}
+                    <div class="seat-row">
+                      <div class="card-row">${this.renderCards(h.cards)}</div>
+                      <div class="total-pill">${handValue(h.cards).total}</div>
+                    </div>
+                    ${r2 ? `<div class="result-overlay">
+                      <span class="result-word ${r2.result}">${RESULT_LABELS[r2.result] || r2.result.toUpperCase()}</span>
+                      <span class="result-amount">${r2.profit > 0 ? '+' : ''}$${r2.profit.toFixed(2)}</span>
+                    </div>` : ''}
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        ` : ''}
+      </div>
 
       <div class="dock">
         ${this.lastError ? `<div class="error-toast">${this.escapeHtml(this.lastError)}</div>` : ''}
 
         ${this.lastError && !legal.length && !(resolved && bothResultsReady) ? `
           <button class="next-hand-btn" data-retry-deal type="button">Reintentar</button>
-        ` : resolved && bothResultsReady ? `<button class="next-hand-btn" data-next-hand type="button">Siguiente mano</button>` : `
+        ` : resolved && bothResultsReady ? `
+          <div class="seat-count-picker">
+            <span class="seat-count-label">Próxima mano:</span>
+            <button class="seat-count-btn ${!this.seat2Open ? 'selected' : ''}" data-seat-count="1" type="button">1 puesto</button>
+            <button class="seat-count-btn ${this.seat2Open ? 'selected' : ''}" data-seat-count="2" type="button">2 puestos</button>
+          </div>
+          <button class="next-hand-btn" data-next-hand type="button">Siguiente mano</button>
+        ` : `
           <div class="action-row">
             <button class="action-btn double" data-action="double" ${legal.includes('double') ? '' : 'disabled'}><span class="icon">2x</span>DOBLAR</button>
             <button class="action-btn hit" data-action="hit" ${legal.includes('hit') ? '' : 'disabled'}><span class="icon">＋</span>PEDIR</button>
@@ -518,8 +522,9 @@ export class BlackjackTableController {
     this.root.querySelectorAll('[data-bet-delta]').forEach(btn => btn.addEventListener('click', () => this.adjustBet(Number(btn.dataset.betDelta))));
     const pctBtn = this.root.querySelector('[data-bet-pct]');
     if (pctBtn) pctBtn.addEventListener('click', () => this.setBetPercentOfBankroll(Number(pctBtn.dataset.betPct)));
-    const seat2Btn = this.root.querySelector('[data-toggle-seat2]');
-    if (seat2Btn) seat2Btn.addEventListener('click', () => this.toggleSeat2());
+    this.root.querySelectorAll('[data-seat-count]').forEach(btn => {
+      btn.addEventListener('click', () => this.setSeatCount(Number(btn.dataset.seatCount)));
+    });
   }
 
   renderCards(cards) {
