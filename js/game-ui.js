@@ -204,7 +204,11 @@ export class BlackjackTableController {
     if (!amount || amount <= 0) return;
     this.bankroll += amount;
     this.bankrollStart += amount;
-    this.render();
+    if (this.lastError) {
+      this.dealNewHand(); // reintenta el reparto que había fallado por saldo insuficiente
+    } else {
+      this.render();
+    }
   }
 
   setTableLimits(minBet, maxBet) {
@@ -212,7 +216,11 @@ export class BlackjackTableController {
     this.minimumBet = minBet;
     this.maximumBet = maxBet;
     this.currentBet = Math.min(Math.max(this.currentBet, minBet), maxBet);
-    this.render();
+    if (this.lastError) {
+      this.dealNewHand();
+    } else {
+      this.render();
+    }
   }
 
   adjustBet(delta) {
@@ -317,7 +325,9 @@ export class BlackjackTableController {
       <div class="dock">
         ${this.lastError ? `<div class="error-toast">${this.escapeHtml(this.lastError)}</div>` : ''}
 
-        ${resolved && this.lastHandResults ? `<button class="next-hand-btn" data-next-hand type="button">Siguiente mano</button>` : `
+        ${this.lastError && !legal.length && !(resolved && this.lastHandResults) ? `
+          <button class="next-hand-btn" data-retry-deal type="button">Reintentar</button>
+        ` : resolved && this.lastHandResults ? `<button class="next-hand-btn" data-next-hand type="button">Siguiente mano</button>` : `
           <div class="action-row">
             <button class="action-btn double" data-action="double" ${legal.includes('double') ? '' : 'disabled'}><span class="icon">2x</span>DOBLAR</button>
             <button class="action-btn hit" data-action="hit" ${legal.includes('hit') ? '' : 'disabled'}><span class="icon">＋</span>PEDIR</button>
@@ -375,6 +385,8 @@ export class BlackjackTableController {
     this.root.querySelectorAll('[data-action]').forEach(btn => btn.addEventListener('click', () => this.playerAction(btn.dataset.action)));
     const nextBtn = this.root.querySelector('[data-next-hand]');
     if (nextBtn) nextBtn.addEventListener('click', () => this.dealNewHand());
+    const retryBtn = this.root.querySelector('[data-retry-deal]');
+    if (retryBtn) retryBtn.addEventListener('click', () => this.dealNewHand());
     this.root.querySelectorAll('[data-bet-delta]').forEach(btn => btn.addEventListener('click', () => this.adjustBet(Number(btn.dataset.betDelta))));
     const pctBtn = this.root.querySelector('[data-bet-pct]');
     if (pctBtn) pctBtn.addEventListener('click', () => this.setBetPercentOfBankroll(Number(pctBtn.dataset.betPct)));
