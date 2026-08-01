@@ -90,22 +90,23 @@ export class BlackjackTableController {
 
   /** Elige 1 o 2 puestos para la PRÓXIMA mano — solo aparece cuando no hay mano en curso. */
   setSeatCount(count) {
+    if (this.currentActiveTarget()) return; // protección extra: nunca cambiar mientras hay una mano sin terminar
     this.seat2Open = count === 2;
     if (!this.seat2Open) this.hand2 = null;
     this.render();
   }
 
-  /** ¿Ya se resolvieron todos los puestos abiertos en esta mano? */
+  /** ¿Ya se resolvieron todos los puestos que tienen mano repartida en esta ronda? */
   bothSeatsResolved() {
     const seat1Done = !this.hand || allPlayerHandsResolved(this.hand);
-    const seat2Done = !this.seat2Open || !this.hand2 || allPlayerHandsResolved(this.hand2);
+    const seat2Done = !this.hand2 || allPlayerHandsResolved(this.hand2);
     return seat1Done && seat2Done;
   }
 
   /** ¿Cuál puesto le toca jugar ahora mismo? 'hand', 'hand2', o null si ya no hay nada pendiente. */
   currentActiveTarget() {
     if (this.hand && !allPlayerHandsResolved(this.hand)) return 'hand';
-    if (this.seat2Open && this.hand2 && !allPlayerHandsResolved(this.hand2)) return 'hand2';
+    if (this.hand2 && !allPlayerHandsResolved(this.hand2)) return 'hand2';
     return null;
   }
 
@@ -270,7 +271,7 @@ export class BlackjackTableController {
 
   async finishHand() {
     try {
-      if (this.seat2Open && this.hand2) {
+      if (this.hand2) {
         playDealerHandMultiSeat(this.game, [this.hand, this.hand2]);
         this.lastHandResults = await this.settleOneSeat(this.hand, 1);
         this.lastHandResults2 = await this.settleOneSeat(this.hand2, 2);
@@ -421,7 +422,7 @@ export class BlackjackTableController {
           </div>
         </div>
 
-        ${this.seat2Open && this.hand2 ? `
+        ${this.hand2 ? `
           <div class="seat">
             <div class="seat-label">Puesto 2</div>
             <div class="hands-row">
