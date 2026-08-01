@@ -5,7 +5,7 @@
 // abrirse para ver los errores (mistakes) más recientes de esa situación.
 
 import { getCurrentSession, subscribeToAuthChanges } from './auth.js';
-import { getMyProfile, getPlayerStats, getMyMistakes } from './game-repository.js';
+import { getMyProfile, getPlayerStats, getMyMistakes, getFatigueStreakData } from './game-repository.js';
 
 const backButton = document.getElementById('backButton');
 const reportsBody = document.getElementById('reportsBody');
@@ -105,6 +105,76 @@ function renderCategoryCard(categoryKey, agg) {
   return card;
 }
 
+function bucketize(rows, valueFn, buckets) {
+  const results = buckets.map(b => ({ ...b, total: 0, correct: 0 }));
+  for (const row of rows) {
+    const value = valueFn(row);
+    if (value === null || value === undefined) continue;
+    const bucket = results.find(b => value >= b.min && value <= b.max);
+    if (!bucket) continue;
+    bucket.total += 1;
+    if (row.is_correct) bucket.correct += 1;
+  }
+  return results;
+}
+
+function renderBarCard(title, buckets) {
+  const card = document.createElement('div');
+  card.className = 'bar-card';
+  const maxTotal = Math.max(1, ...buckets.map(b => b.total));
+  card.innerHTML = `
+    <div class="section-title" style="margin-bottom:6px;">${title}</div>
+    ${buckets.map(b => {
+      const pct = b.total > 0 ? Math.round((b.correct / b.total) * 100) : null;
+      const cls = pct === null ? '' : pct >= 85 ? '' : pct >= 65 ? 'mid' : 'low';
+      return `
+        <div class="bar-row">
+          <span class="bar-label">${b.label}</span>
+          <span class="bar-track"><span class="bar-fill ${cls}" style="width:${pct ?? 0}%"></span></span>
+          <span class="bar-pct">${pct === null ? '—' : pct + '%'}</span>
+        </div>
+        <div class="bar-n">${b.total} decisiones</div>
+      `;
+    }).join('')}
+  `;
+  return card;
+}
+
+async function loadFatigueStreakSection() {
+  try {
+    const rows = await getFatigueStreakData();
+    const clean = rows
+      .filter(r => r.hands && r.hands.hands_played_in_session_so_far !== null)
+      .map(r => ({
+        is_correct: r.is_correct,
+        handsPlayed: r.hands.hands_played_in_session_so_far,
+        streak: r.hands.current_streak_before_hand,
+      }));
+
+    if (clean.length === 0) return;
+
+    const fatigueBuckets = bucketize(clean, r => r.handsPlayed, [
+      { label: '1ª–10ª mano', min: 0, max: 9 },
+      { label: '11ª–20ª mano', min: 10, max: 19 },
+      { label: '21ª–30ª mano', min: 20, max: 29 },
+      { label: '31ª en adelante', min: 30, max: 9999 },
+    ]);
+
+    const streakBuckets = bucketize(clean, r => r.streak, [
+      { label: 'Racha −3 o peor', min: -9999, max: -3 },
+      { label: 'Racha −1 / −2', min: -2, max: -1 },
+      { label: 'Sin racha', min: 0, max: 0 },
+      { label: 'Racha +1 / +2', min: 1, max: 2 },
+      { label: 'Racha +3 o mejor', min: 3, max: 9999 },
+    ]);
+
+    reportsBody.appendChild(renderBarCard('Precisión según cuántas manos llevas jugadas (fatiga)', fatigueBuckets));
+    reportsBody.appendChild(renderBarCard('Precisión según tu racha antes de la mano (tilt)', streakBuckets));
+  } catch (error) {
+    console.error('No se pudo cargar fatiga/racha:', error);
+  }
+}
+
 async function loadReport() {
   try {
     const stats = await getPlayerStats();
@@ -139,6 +209,8 @@ async function loadReport() {
     sortedCategories.forEach(cat => {
       reportsBody.appendChild(renderCategoryCard(cat, byCategory[cat]));
     });
+
+    await loadFatigueStreakSection();
   } catch (error) {
     console.error('No se pudo cargar el reporte:', error);
     reportsBody.innerHTML = `<div class="empty-state">No se pudo cargar el reporte: ${error?.message || error}</div>`;

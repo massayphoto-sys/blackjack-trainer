@@ -229,3 +229,17 @@ export async function getMyMistakes({ errorCategory = null, limit = 30 } = {}) {
   if (error) throw error;
   return data;
 }
+
+/**
+ * Datos de precisión cruzados con fatiga (número de mano en la sesión) y
+ * racha (rachas de victorias/derrotas antes de cada mano) — para el
+ * reporte de fatiga/racha. Usa la relación decisions -> hands para traer
+ * ambos campos en una sola consulta.
+ */
+export async function getFatigueStreakData() {
+  const { data, error } = await supabase
+    .from('decisions')
+    .select('is_correct, ev_loss, hands(hands_played_in_session_so_far, current_streak_before_hand)');
+  if (error) throw error;
+  return data;
+}
