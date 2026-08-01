@@ -167,7 +167,15 @@ export class BlackjackTableController {
       this.bestStreak = Math.max(this.bestStreak, this.game.currentStreak);
       this.lastHandResults = { handResults, totalProfit };
 
-      await repo.saveResolvedHand({ sessionId: this.session.id, shoeId: this.currentShoeRow.id, hand: this.hand, handResults, totalProfit, seatNumber: 1 });
+      await repo.saveResolvedHand({
+        sessionId: this.session.id,
+        shoeId: this.currentShoeRow.id,
+        hand: this.hand,
+        handResults,
+        totalProfit,
+        seatNumber: 1,
+        globalHandNumber: this.sessionTotals.totalHands + 1, // continuo a través de toda la sesión, no se reinicia por zapato
+      });
 
       this.sessionTotals.totalHands += 1;
       this.sessionTotals.correctDecisions += this.hand.decisions.filter(d => d.isCorrect).length;

@@ -86,13 +86,13 @@ export async function saveShoe({ id, sessionId, shoeNumber, shoe, endedAt }) {
 }
 
 /** Inserta la mano ya resuelta, junto con sus decisiones y los errores (mistakes) detectados. */
-export async function saveResolvedHand({ sessionId, shoeId, hand, handResults, totalProfit, seatNumber = 1 }) {
+export async function saveResolvedHand({ sessionId, shoeId, hand, handResults, totalProfit, seatNumber = 1, globalHandNumber }) {
   const { data: handRow, error: handError } = await supabase
     .from('hands')
     .insert({
       session_id: sessionId,
       shoe_id: shoeId,
-      hand_number: hand.handNumberInShoe, // TODO: si se quiere un correlativo global de sesión, sumar offset por zapatos previos
+      hand_number: globalHandNumber, // continuo a través de toda la sesión (único junto con session_id)
       hand_number_in_shoe: hand.handNumberInShoe,
       shoe_number: hand.shoeNumber,
       seat_number: seatNumber,
