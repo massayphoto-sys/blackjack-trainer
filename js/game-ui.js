@@ -5,8 +5,8 @@
 // que reciben los datos vía el callback onUpdate.
 
 import {
-  createGame, dealInitialRound, availableActions, applyPlayerAction,
-  allPlayerHandsResolved, playDealerHand, resolveInsurance,
+  createGame, dealInitialRound, dealMultiSeatRound, availableActions, applyPlayerAction,
+  allPlayerHandsResolved, playDealerHand, playDealerHandMultiSeat, resolveInsurance,
   resolveHandResults, updateStreak, shoeNeedsReplacement, startNewShoe,
 } from './game.js';
 import { handValue } from './deck.js';
@@ -28,6 +28,9 @@ export class BlackjackTableController {
     this.session = null;
     this.currentShoeRow = null;
     this.hand = null;
+    this.seat2Open = false;
+    this.hand2 = null;
+    this.lastHandResults2 = null;
     this.lastError = null;
     this.lastHandResults = null;
     this.sessionStartedAt = null;
@@ -85,20 +88,64 @@ export class BlackjackTableController {
     }
   }
 
+  /** Puede abrir/cerrar el puesto 2 solo cuando no hay una mano en curso. */
+  toggleSeat2() {
+    const resolved = !this.hand || allPlayerHandsResolved(this.hand);
+    if (!resolved) return;
+    this.seat2Open = !this.seat2Open;
+    if (!this.seat2Open) this.hand2 = null;
+    this.render();
+  }
+
+  /** ¿Ya se resolvieron todos los puestos abiertos en esta mano? */
+  bothSeatsResolved() {
+    const seat1Done = !this.hand || allPlayerHandsResolved(this.hand);
+    const seat2Done = !this.seat2Open || !this.hand2 || allPlayerHandsResolved(this.hand2);
+    return seat1Done && seat2Done;
+  }
+
+  /** ¿Cuál puesto le toca jugar ahora mismo? 'hand', 'hand2', o null si ya no hay nada pendiente. */
+  currentActiveTarget() {
+    if (this.hand && !allPlayerHandsResolved(this.hand)) return 'hand';
+    if (this.seat2Open && this.hand2 && !allPlayerHandsResolved(this.hand2)) return 'hand2';
+    return null;
+  }
+
   async dealNewHand() {
     try {
       this.lastError = null;
       this.lastHandResults = null;
+      this.lastHandResults2 = null;
       await this.ensureShoe();
-      if (this.currentBet > this.bankroll) throw new Error('Saldo insuficiente. Compra más fichas o baja tu apuesta.');
+
+      const totalStake = this.seat2Open ? this.currentBet * 2 : this.currentBet;
+      if (totalStake > this.bankroll) throw new Error('Saldo insuficiente. Compra más fichas o baja tu apuesta.');
 
       const previousBet = this.hand?.playerHands?.[0]?.bet ?? null;
-      this.hand = dealInitialRound(this.game, { betAmount: this.currentBet, bankrollBeforeHand: this.bankroll, previousBetAmount: previousBet });
-      this.render();
-      if (this.hand.naturalBlackjackResolved) {
-        await this.finishHand();
-      } else if (this.hand.insurance.offered) {
-        this.showInsuranceModal();
+
+      if (this.seat2Open) {
+        const [h1, h2] = dealMultiSeatRound(this.game, [
+          { betAmount: this.currentBet, bankrollBeforeHand: this.bankroll, previousBetAmount: previousBet },
+          { betAmount: this.currentBet, bankrollBeforeHand: this.bankroll, previousBetAmount: previousBet },
+        ]);
+        this.hand = h1;
+        this.hand2 = h2;
+        // v1: con 2 puestos abiertos el seguro se rechaza automáticamente
+        // (simplificación — preguntar el seguro por separado para cada
+        // puesto queda para una siguiente iteración).
+        if (this.hand.insurance.offered) resolveInsurance(this.hand, false, 0);
+        if (this.hand2.insurance.offered) resolveInsurance(this.hand2, false, 0);
+        this.render();
+        if (this.bothSeatsResolved()) await this.finishHand();
+      } else {
+        this.hand = dealInitialRound(this.game, { betAmount: this.currentBet, bankrollBeforeHand: this.bankroll, previousBetAmount: previousBet });
+        this.hand2 = null;
+        this.render();
+        if (this.hand.naturalBlackjackResolved) {
+          await this.finishHand();
+        } else if (this.hand.insurance.offered) {
+          this.showInsuranceModal();
+        }
       }
     } catch (error) {
       console.error('dealNewHand error:', error);
@@ -146,12 +193,26 @@ export class BlackjackTableController {
 
   async playerAction(action) {
     try {
-      const legal = availableActions(this.hand, this.bankroll - this.currentActiveHandsCommitted());
+      const target = this.currentActiveTarget();
+      if (!target) return;
+      const hand = this[target];
+
+      const legal = availableActions(hand, this.bankroll - this.currentActiveHandsCommitted());
       if (!legal.includes(action)) return;
+
+      if (action === 'hit') {
+        const active = hand.playerHands[hand.activeHandIndex];
+        const { total } = handValue(active.cards);
+        if (total >= 17 && total <= 20) {
+          const confirmed = await this.confirmRiskyHit(total);
+          if (!confirmed) return;
+        }
+      }
+
       this.markDecisionTime();
-      applyPlayerAction(this.game, this.hand, action);
+      applyPlayerAction(this.game, hand, action);
       this.render();
-      if (allPlayerHandsResolved(this.hand)) await this.finishHand();
+      if (this.bothSeatsResolved()) await this.finishHand();
     } catch (error) {
       console.error('playerAction error:', error);
       this.lastError = error?.message || String(error);
@@ -159,35 +220,70 @@ export class BlackjackTableController {
     }
   }
 
+  /** Pide confirmación antes de pedir carta con un total ya fuerte (17-20) — protege contra toques accidentales. */
+  confirmRiskyHit(total) {
+    return new Promise((resolve) => {
+      const backdrop = document.createElement('div');
+      backdrop.className = 'sheet-backdrop';
+      backdrop.innerHTML = `
+        <div class="sheet">
+          <h3>¿Seguro que quieres pedir con ${total}?</h3>
+          <p>Es un total ya fuerte — confirma que no fue sin querer.</p>
+          <div class="sheet-actions">
+            <button class="cancel" type="button">No, mejor no</button>
+            <button class="confirm" type="button">Sí, pedir</button>
+          </div>
+        </div>
+      `;
+      (this.root.closest('.table-screen') || document.body).appendChild(backdrop);
+      backdrop.querySelector('.confirm').addEventListener('click', () => { backdrop.remove(); resolve(true); });
+      backdrop.querySelector('.cancel').addEventListener('click', () => { backdrop.remove(); resolve(false); });
+    });
+  }
+
   currentActiveHandsCommitted() {
-    return this.hand?.playerHands?.reduce((s, h) => s + h.bet, 0) ?? 0;
+    const h1 = this.hand?.playerHands?.reduce((s, h) => s + h.bet, 0) ?? 0;
+    const h2 = this.seat2Open ? (this.hand2?.playerHands?.reduce((s, h) => s + h.bet, 0) ?? 0) : 0;
+    return h1 + h2;
+  }
+
+  /** Resuelve y guarda UN puesto ya jugado; acumula sus totales de sesión. Devuelve el resultado para mostrarlo. */
+  async settleOneSeat(hand, seatNumber) {
+    const { handResults, totalProfit, insuranceProfit } = resolveHandResults(hand);
+    this.bankroll += totalProfit;
+
+    await repo.saveResolvedHand({
+      sessionId: this.session.id,
+      shoeId: this.currentShoeRow.id,
+      hand,
+      handResults,
+      totalProfit,
+      seatNumber,
+    });
+
+    this.sessionTotals.totalHands += 1;
+    this.sessionTotals.correctDecisions += hand.decisions.filter(d => d.isCorrect).length;
+    this.sessionTotals.incorrectDecisions += hand.decisions.filter(d => !d.isCorrect).length;
+    this.sessionTotals.totalProfit += totalProfit;
+    this.sessionTotals.totalEvLoss += hand.decisions.reduce((s, d) => s + (d.evLoss || 0), 0);
+
+    return { handResults, totalProfit, insuranceProfit };
   }
 
   async finishHand() {
     try {
-      if (!this.hand.naturalBlackjackResolved) playDealerHand(this.game, this.hand);
-      const { handResults, totalProfit, insuranceProfit } = resolveHandResults(this.hand);
-      this.bankroll += totalProfit;
-      updateStreak(this.game, totalProfit);
+      if (this.seat2Open && this.hand2) {
+        playDealerHandMultiSeat(this.game, [this.hand, this.hand2]);
+        this.lastHandResults = await this.settleOneSeat(this.hand, 1);
+        this.lastHandResults2 = await this.settleOneSeat(this.hand2, 2);
+        updateStreak(this.game, this.lastHandResults.totalProfit + this.lastHandResults2.totalProfit);
+      } else {
+        if (!this.hand.naturalBlackjackResolved) playDealerHand(this.game, this.hand);
+        this.lastHandResults = await this.settleOneSeat(this.hand, 1);
+        updateStreak(this.game, this.lastHandResults.totalProfit);
+      }
       this.bestStreak = Math.max(this.bestStreak, this.game.currentStreak);
-      this.lastHandResults = { handResults, totalProfit, insuranceProfit };
-
-      await repo.saveResolvedHand({
-        sessionId: this.session.id,
-        shoeId: this.currentShoeRow.id,
-        hand: this.hand,
-        handResults,
-        totalProfit,
-        seatNumber: 1,
-      });
-
-      this.sessionTotals.totalHands += 1;
-      this.sessionTotals.correctDecisions += this.hand.decisions.filter(d => d.isCorrect).length;
-      this.sessionTotals.incorrectDecisions += this.hand.decisions.filter(d => !d.isCorrect).length;
-      this.sessionTotals.totalProfit += totalProfit;
-      this.sessionTotals.totalEvLoss += this.hand.decisions.reduce((s, d) => s + (d.evLoss || 0), 0);
       await repo.updateSessionTotals(this.session.id, this.sessionTotals);
-
       this.render();
     } catch (error) {
       console.error('finishHand error:', error);
@@ -260,22 +356,26 @@ export class BlackjackTableController {
   render() {
     if (!this.root) return;
 
-    const resolved = this.hand ? allPlayerHandsResolved(this.hand) : true;
+    const resolved = this.bothSeatsResolved();
     if (this.hand && !resolved && !this.hand.naturalBlackjackResolved && this.decisionStartedAt === null) {
       this.decisionStartedAt = Date.now();
     }
 
     const dealerVisible = this.hand
-      ? (this.hand.naturalBlackjackResolved ? this.hand.dealerCards : (resolved ? this.hand.dealerCards : [this.hand.dealerCards[0]]))
+      ? (resolved ? this.hand.dealerCards : [this.hand.dealerCards[0]])
       : [];
     const insurancePending = Boolean(this.hand?.insurance?.offered && this.hand.insurance.taken === null);
-    const legal = (this.hand && !this.hand.naturalBlackjackResolved && !insurancePending)
-      ? availableActions(this.hand, this.bankroll - this.currentActiveHandsCommitted())
+    const activeTarget = this.currentActiveTarget();
+    const activeHandObj = activeTarget ? this[activeTarget] : null;
+    const legal = (activeHandObj && !insurancePending)
+      ? availableActions(activeHandObj, this.bankroll - this.currentActiveHandsCommitted())
       : [];
 
     const streak = this.game.currentStreak;
     const dealerTotal = dealerVisible.length ? handValue(dealerVisible).total : 0;
     const results = this.lastHandResults?.handResults ?? null;
+    const results2 = this.lastHandResults2?.handResults ?? null;
+    const bothResultsReady = Boolean(this.lastHandResults && (!this.seat2Open || this.lastHandResults2));
     const insuranceProfit = this.lastHandResults?.insuranceProfit ?? 0;
     const activeHand = this.hand ? (this.hand.playerHands[this.hand.activeHandIndex] ?? this.hand.playerHands[0]) : null;
     const profitPct = this.profitPct();
@@ -290,17 +390,20 @@ export class BlackjackTableController {
       <div class="seat">
         <div class="seat-label">Dealer</div>
         <div class="seat-row">
-          <div class="card-row dealer-cards">${this.renderCards(dealerVisible)}${(!resolved && !this.hand.naturalBlackjackResolved) ? this.renderFaceDownCard() : ''}</div>
+          <div class="card-row dealer-cards">${this.renderCards(dealerVisible)}${!resolved ? this.renderFaceDownCard() : ''}</div>
           <div class="total-pill">${dealerTotal}</div>
         </div>
       </div>
 
       <div class="seat">
-        <div class="seat-label">Tú</div>
+        <div class="seat-label">
+          Tú
+          <button class="seat2-toggle" data-toggle-seat2 type="button" ${!resolved ? 'disabled' : ''}>${this.seat2Open ? 'Cerrar puesto 2' : '+ Puesto 2'}</button>
+        </div>
         <div class="hands-row">
           ${this.hand.playerHands.map((h, i) => {
             const r = results ? results[i] : null;
-            const cls = r ? r.result : (i === this.hand.activeHandIndex ? 'active' : '');
+            const cls = r ? r.result : (i === this.hand.activeHandIndex && activeTarget === 'hand' ? 'active' : '');
             return `
               <div class="hand-slot ${cls}">
                 ${this.hand.playerHands.length > 1 ? `<div class="hand-slot-label">Jugada ${i + 1}</div>` : ''}
@@ -322,12 +425,37 @@ export class BlackjackTableController {
         </div>
       </div>
 
+      ${this.seat2Open && this.hand2 ? `
+        <div class="seat">
+          <div class="seat-label">Puesto 2</div>
+          <div class="hands-row">
+            ${this.hand2.playerHands.map((h, i) => {
+              const r2 = results2 ? results2[i] : null;
+              const cls = r2 ? r2.result : (i === this.hand2.activeHandIndex && activeTarget === 'hand2' ? 'active' : '');
+              return `
+                <div class="hand-slot ${cls}">
+                  ${this.hand2.playerHands.length > 1 ? `<div class="hand-slot-label">Jugada ${i + 1}</div>` : ''}
+                  <div class="seat-row">
+                    <div class="card-row">${this.renderCards(h.cards)}</div>
+                    <div class="total-pill">${handValue(h.cards).total}</div>
+                  </div>
+                  ${r2 ? `<div class="result-overlay">
+                    <span class="result-word ${r2.result}">${RESULT_LABELS[r2.result] || r2.result.toUpperCase()}</span>
+                    <span class="result-amount">${r2.profit > 0 ? '+' : ''}$${r2.profit.toFixed(2)}</span>
+                  </div>` : ''}
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      ` : ''}
+
       <div class="dock">
         ${this.lastError ? `<div class="error-toast">${this.escapeHtml(this.lastError)}</div>` : ''}
 
-        ${this.lastError && !legal.length && !(resolved && this.lastHandResults) ? `
+        ${this.lastError && !legal.length && !(resolved && bothResultsReady) ? `
           <button class="next-hand-btn" data-retry-deal type="button">Reintentar</button>
-        ` : resolved && this.lastHandResults ? `<button class="next-hand-btn" data-next-hand type="button">Siguiente mano</button>` : `
+        ` : resolved && bothResultsReady ? `<button class="next-hand-btn" data-next-hand type="button">Siguiente mano</button>` : `
           <div class="action-row">
             <button class="action-btn double" data-action="double" ${legal.includes('double') ? '' : 'disabled'}><span class="icon">2x</span>DOBLAR</button>
             <button class="action-btn hit" data-action="hit" ${legal.includes('hit') ? '' : 'disabled'}><span class="icon">＋</span>PEDIR</button>
@@ -390,6 +518,8 @@ export class BlackjackTableController {
     this.root.querySelectorAll('[data-bet-delta]').forEach(btn => btn.addEventListener('click', () => this.adjustBet(Number(btn.dataset.betDelta))));
     const pctBtn = this.root.querySelector('[data-bet-pct]');
     if (pctBtn) pctBtn.addEventListener('click', () => this.setBetPercentOfBankroll(Number(pctBtn.dataset.betPct)));
+    const seat2Btn = this.root.querySelector('[data-toggle-seat2]');
+    if (seat2Btn) seat2Btn.addEventListener('click', () => this.toggleSeat2());
   }
 
   renderCards(cards) {

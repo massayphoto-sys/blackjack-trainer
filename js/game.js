@@ -97,6 +97,99 @@ export function dealInitialRound(game, { betAmount, bankrollBeforeHand, previous
   return hand;
 }
 
+/**
+ * Reparte una ronda para varios puestos que comparten el MISMO zapato y
+ * la MISMA mano de casa — a diferencia de llamar dealInitialRound()
+ * varias veces (que crearía una casa distinta por cada llamada, algo
+ * incorrecto). Orden real de reparto: una carta a cada puesto en orden,
+ * luego la casa (visible), otra vuelta a cada puesto, luego la casa
+ * (tapada).
+ *
+ * seatConfigs: array de { betAmount, bankrollBeforeHand, previousBetAmount }
+ * Devuelve: array de objetos "hand" — cada uno con la MISMA forma que
+ * devuelve dealInitialRound(), así que availableActions/applyPlayerAction/
+ * resolveHandResults/resolveInsurance se reutilizan sin cambios, por
+ * puesto. Los objetos comparten la misma referencia a dealerCards.
+ */
+export function dealMultiSeatRound(game, seatConfigs) {
+  if (shoeNeedsReplacement(game)) startNewShoe(game);
+  game.handNumberInShoe += 1;
+  game.handsPlayedInSession += 1;
+
+  const shoe = game.shoe;
+  const numSeats = seatConfigs.length;
+  const seatCardsRound1 = Array.from({ length: numSeats }, () => dealCard(shoe));
+  const dealerCards = [dealCard(shoe)]; // dealer[0] visible
+  const seatCardsRound2 = Array.from({ length: numSeats }, () => dealCard(shoe));
+  dealerCards.push(dealCard(shoe)); // dealer[1] tapada
+
+  const dealerUpcard = normalizeDealerUpcard(dealerCards[0].rank);
+  const dealerShowsAce = dealerCards[0].rank === 'A';
+  const dealerShowsTen = ['10', 'J', 'Q', 'K'].includes(dealerCards[0].rank);
+
+  return seatConfigs.map((cfg, i) => {
+    const playerCards = [seatCardsRound1[i], seatCardsRound2[i]];
+    const playerBJ = handValue(playerCards).isBlackjack;
+
+    const hand = {
+      handNumberInShoe: game.handNumberInShoe,
+      shoeNumber: game.shoeNumber,
+      seatNumber: i + 1,
+      betAmount: cfg.betAmount,
+      bankrollBeforeHand: cfg.bankrollBeforeHand,
+      previousBetAmount: cfg.previousBetAmount ?? null,
+      currentStreakBeforeHand: game.currentStreak,
+      handsPlayedInSessionSoFar: game.handsPlayedInSession - 1,
+      dealerUpcard,
+      dealerHoleCard: dealerCards[1],
+      dealerCards, // referencia COMPARTIDA entre todos los puestos de esta ronda
+      playerHands: [
+        { cards: playerCards, bet: cfg.betAmount, status: 'active', isDoubled: false, isSplitAces: false, splitIndex: 0 },
+      ],
+      activeHandIndex: 0,
+      insurance: dealerShowsAce ? { offered: true, taken: null, amount: 0 } : { offered: false },
+      decisions: [],
+      startedAt: new Date().toISOString(),
+      naturalBlackjackResolved: false,
+    };
+
+    if (playerBJ && (dealerShowsAce || dealerShowsTen)) {
+      const dealerBJ = handValue(dealerCards).isBlackjack;
+      hand.naturalBlackjackResolved = true;
+      hand.playerHands[0].status = dealerBJ ? 'push' : 'blackjack_win';
+    } else if (playerBJ) {
+      hand.naturalBlackjackResolved = true;
+      hand.playerHands[0].status = 'blackjack_win';
+    } else if (dealerShowsTen) {
+      const dealerBJ = handValue(dealerCards).isBlackjack;
+      if (dealerBJ) {
+        hand.naturalBlackjackResolved = true;
+        hand.playerHands[0].status = 'dealer_blackjack';
+      }
+    }
+
+    return hand;
+  });
+}
+
+/**
+ * Juega la mano de la casa UNA sola vez para toda la mesa (no por
+ * puesto — comparten la misma casa). Solo se detiene sin repartir si
+ * TODOS los puestos ya están resueltos o todos reventados — si al
+ * menos uno sigue con posibilidad de ganar, la casa juega normal.
+ */
+export function playDealerHandMultiSeat(game, seats) {
+  const dealerStillMatters = seats.some(s => !s.naturalBlackjackResolved && !allPlayerHandsBusted(s));
+  if (!dealerStillMatters) return seats[0].dealerCards;
+
+  let v = handValue(seats[0].dealerCards);
+  while (v.total < 17) {
+    seats[0].dealerCards.push(dealCard(game.shoe));
+    v = handValue(seats[0].dealerCards);
+  }
+  return seats[0].dealerCards;
+}
+
 /** Determina las acciones disponibles para la mano activa en este momento. */
 export function availableActions(hand, bankroll) {
   if (hand.naturalBlackjackResolved) return [];

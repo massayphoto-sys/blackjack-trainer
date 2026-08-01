@@ -155,7 +155,13 @@ button { cursor: pointer; }
 .felt-watermark .fw-rules { font-size: 8px; letter-spacing: .06em; margin-top: 6px; line-height: 1.6; }
 
 .seat { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.seat-label { font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: #cfe3d5; }
+.seat-label { font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: #cfe3d5; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.seat2-toggle {
+  font-size: 9px; font-weight: 800; letter-spacing: 0; text-transform: none;
+  padding: 4px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,.2);
+  background: rgba(255,255,255,.04); color: var(--text); cursor: pointer;
+}
+.seat2-toggle:disabled { opacity: .4; cursor: not-allowed; }
 .seat-row { display: flex; align-items: center; gap: 10px; justify-content: center; }
 .hands-row { display: flex; flex-direction: row-reverse; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .hand-slot-label { font-size: 9px; font-weight: 800; letter-spacing: .05em; color: var(--muted); text-align: center; margin-bottom: 3px; text-transform: uppercase; }
