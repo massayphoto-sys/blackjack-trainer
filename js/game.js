@@ -215,7 +215,7 @@ export function applyPlayerAction(game, hand, playerAction) {
       const newHand = {
         cards: [cardB, dealCard(game.shoe)],
         bet: active.bet,
-        status: 'active',
+        status: isAceSplit ? 'stood' : 'active', // Ases divididos: la segunda mano también recibe solo una carta, sin poder pedir más
         isDoubled: false,
         isSplitAces: isAceSplit,
         splitIndex: hand.playerHands.length,
