@@ -130,7 +130,7 @@ async function handleResume(button, activeSession) {
   button.textContent = 'Retomando…';
   try {
     controller = makeController();
-    controller.resumeSession(activeSession);
+    await controller.resumeSession(activeSession);
     startScreen.remove();
     await controller.dealNewHand();
   } catch (error) {

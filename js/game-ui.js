@@ -50,7 +50,7 @@ export class BlackjackTableController {
    * empieza de cero — no se guarda la posición exacta dentro de un
    * zapato entre recargas de página, solo el estado de la sesión.
    */
-  resumeSession(sessionRow) {
+  async resumeSession(sessionRow) {
     this.session = sessionRow;
     this.bankrollStart = Number(sessionRow.bankroll_start);
     this.bankroll = this.bankrollStart + Number(sessionRow.total_profit || 0);
@@ -65,6 +65,11 @@ export class BlackjackTableController {
       totalEvLoss: Number(sessionRow.total_ev_loss || 0),
     };
     this.sessionStartedAt = new Date(sessionRow.started_at).getTime();
+
+    // El zapato en sí empieza de cero (no se guarda su posición exacta),
+    // pero el CONTADOR sigue donde iba — si ya llevabas 3 zapatos, el
+    // próximo que se reparta debe llamarse "Zapato 4", no volver a "1".
+    this.game.shoeNumber = await repo.getShoeCountForSession(sessionRow.id);
   }
 
   async ensureShoe() {

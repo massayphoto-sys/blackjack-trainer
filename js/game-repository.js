@@ -286,3 +286,16 @@ export async function getActiveSession() {
   if (error) throw error;
   return data;
 }
+
+/** Cuenta cuántos zapatos ya se jugaron en esta sesión (para retomar el número correcto, no reiniciar en 1). */
+export async function getShoeCountForSession(sessionId) {
+  const { data, error } = await supabase
+    .from('shoes')
+    .select('shoe_number')
+    .eq('session_id', sessionId)
+    .order('shoe_number', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.shoe_number ?? 0;
+}
