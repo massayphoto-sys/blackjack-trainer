@@ -174,7 +174,6 @@ export class BlackjackTableController {
         handResults,
         totalProfit,
         seatNumber: 1,
-        globalHandNumber: this.sessionTotals.totalHands + 1, // continuo a través de toda la sesión, no se reinicia por zapato
       });
 
       this.sessionTotals.totalHands += 1;

@@ -85,39 +85,65 @@ export async function saveShoe({ id, sessionId, shoeNumber, shoe, endedAt }) {
   return data;
 }
 
-/** Inserta la mano ya resuelta, junto con sus decisiones y los errores (mistakes) detectados. */
-export async function saveResolvedHand({ sessionId, shoeId, hand, handResults, totalProfit, seatNumber = 1, globalHandNumber }) {
-  const { data: handRow, error: handError } = await supabase
+/** Consulta el número de mano más alto ya guardado para esta sesión (fuente de verdad real, no lo que recuerde esta pestaña). */
+async function getNextHandNumber(sessionId) {
+  const { data, error } = await supabase
     .from('hands')
-    .insert({
-      session_id: sessionId,
-      shoe_id: shoeId,
-      hand_number: globalHandNumber, // continuo a través de toda la sesión (único junto con session_id)
-      hand_number_in_shoe: hand.handNumberInShoe,
-      shoe_number: hand.shoeNumber,
-      seat_number: seatNumber,
-      bet_amount: hand.playerHands[0].bet,
-      bankroll_before_hand: hand.bankrollBeforeHand,
-      previous_bet_amount: hand.previousBetAmount,
-      current_streak_before_hand: hand.currentStreakBeforeHand,
-      hands_played_in_session_so_far: hand.handsPlayedInSessionSoFar,
-      dealer_upcard: hand.dealerUpcard,
-      player_initial_cards: hand.playerHands[0].cards.slice(0, 2).map(c => `${c.rank}${c.suit}`),
-      dealer_initial_cards: hand.dealerCards.slice(0, 2).map(c => `${c.rank}${c.suit}`),
-      final_player_hands: handResults.map(r => r.cards.map(c => `${c.rank}${c.suit}`)),
-      final_dealer_cards: hand.dealerCards.map(c => `${c.rank}${c.suit}`),
-      running_count: hand.decisions.at(-1)?.runningCount ?? null,
-      true_count: hand.decisions.at(-1)?.trueCount ?? null,
-      result: handResults.length === 1 ? handResults[0].result : null, // manos divididas: resultado detallado vive en cada decisión/hand hija si se modela así
-      profit: totalProfit,
-      ev_loss: hand.decisions.reduce((s, d) => s + (d.evLoss || 0), 0),
-      started_at: hand.startedAt,
-      ended_at: new Date().toISOString(),
-    })
-    .select()
-    .single();
+    .select('hand_number')
+    .eq('session_id', sessionId)
+    .order('hand_number', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return (data?.hand_number ?? 0) + 1;
+}
 
-  if (handError) throw handError;
+/** Inserta la mano ya resuelta, junto con sus decisiones y los errores (mistakes) detectados. */
+export async function saveResolvedHand({ sessionId, shoeId, hand, handResults, totalProfit, seatNumber = 1 }) {
+  const maxAttempts = 4;
+  let handRow = null;
+  let lastError = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const handNumber = await getNextHandNumber(sessionId);
+    const { data, error } = await supabase
+      .from('hands')
+      .insert({
+        session_id: sessionId,
+        shoe_id: shoeId,
+        hand_number: handNumber, // se consulta a la BD justo antes de insertar, no se confía en un contador local — evita choques entre pestañas
+        hand_number_in_shoe: hand.handNumberInShoe,
+        shoe_number: hand.shoeNumber,
+        seat_number: seatNumber,
+        bet_amount: hand.playerHands[0].bet,
+        bankroll_before_hand: hand.bankrollBeforeHand,
+        previous_bet_amount: hand.previousBetAmount,
+        current_streak_before_hand: hand.currentStreakBeforeHand,
+        hands_played_in_session_so_far: hand.handsPlayedInSessionSoFar,
+        dealer_upcard: hand.dealerUpcard,
+        player_initial_cards: hand.playerHands[0].cards.slice(0, 2).map(c => `${c.rank}${c.suit}`),
+        dealer_initial_cards: hand.dealerCards.slice(0, 2).map(c => `${c.rank}${c.suit}`),
+        final_player_hands: handResults.map(r => r.cards.map(c => `${c.rank}${c.suit}`)),
+        final_dealer_cards: hand.dealerCards.map(c => `${c.rank}${c.suit}`),
+        running_count: hand.decisions.at(-1)?.runningCount ?? null,
+        true_count: hand.decisions.at(-1)?.trueCount ?? null,
+        result: handResults.length === 1 ? handResults[0].result : null, // manos divididas: resultado detallado vive en cada decisión/hand hija si se modela así
+        profit: totalProfit,
+        ev_loss: hand.decisions.reduce((s, d) => s + (d.evLoss || 0), 0),
+        started_at: hand.startedAt,
+        ended_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (!error) { handRow = data; break; }
+
+    lastError = error;
+    // 23505 = violación de llave única (choque con otra pestaña) — reintenta con el número actualizado
+    if (error.code !== '23505') throw error;
+  }
+
+  if (!handRow) throw lastError;
 
   if (hand.decisions.length > 0) {
     const decisionRows = hand.decisions.map((d, i) => ({
