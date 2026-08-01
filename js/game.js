@@ -283,7 +283,11 @@ export function playDealerHand(game, hand) {
 export function resolveInsurance(hand, took, insuranceAmount) {
   const dealerBJ = handValue(hand.dealerCards).isBlackjack;
   hand.insurance = { offered: true, taken: took, amount: took ? insuranceAmount : 0, won: took && dealerBJ };
-  if (!took && dealerBJ) {
+  if (dealerBJ) {
+    // La casa gana la mano principal en cualquier caso cuando tiene
+    // blackjack — el seguro es una apuesta lateral, no reemplaza el
+    // resultado de la mano. Antes solo se cerraba si el jugador NO
+    // tomaba el seguro, dejando la mano "activa" (bug) cuando sí lo tomaba.
     hand.playerHands.forEach(h => { h.status = 'dealer_blackjack'; });
   }
   return hand.insurance;
