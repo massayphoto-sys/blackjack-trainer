@@ -5,30 +5,9 @@
 // game-ui.js llama a estas funciones desde los botones.
 
 import { createShoe, dealCard, isPastCutCard, handValue, RANK_VALUE } from './deck.js';
-import { basicStrategyAction, exactOptimalAction, normalizeDealerUpcard, ACTIONS } from './strategy.js';
+import { basicStrategyAction, normalizeDealerUpcard, ACTIONS } from './strategy.js';
 import { buildDecisionAnalytics } from './analytics.js';
-
-/**
- * NOTA IMPORTANTE SOBRE EV (expected value) POR DECISIÓN:
- * Calcular el EV exacto en dinero de cada acción posible (hit/stand/
- * double/split) para una mano y composición de zapato específicas
- * requiere una simulación combinatoria (o tablas precalculadas por
- * millones de manos, tipo las que usan CVCX/CVData). Ese cálculo es un
- * proyecto en sí mismo y está fuera del alcance de este motor inicial.
- *
- * Por ahora, `ev_player_action`/`ev_optimal_action` se dejan en null si
- * el jugador siguió la jugada correcta (EV loss = 0 por definición), y
- * se marca con un valor heurístico simple si se desvía (ver
- * estimateHeuristicEvLoss). Sustituir por un motor de EV real es el
- * siguiente paso natural una vez el flujo de datos esté validado.
- */
-function estimateHeuristicEvLoss(playerAction, optimalAction) {
-  if (playerAction === optimalAction) return 0;
-  // Heurística provisional: castiga más los errores en manos "grandes"
-  // (double/split perdidos) que los errores de hit/stand simples.
-  const bigMistake = [ACTIONS.DOUBLE, ACTIONS.SPLIT].includes(optimalAction);
-  return bigMistake ? 0.15 : 0.05; // fracción de la apuesta, placeholder
-}
+import { computeExactEV } from './ev-engine.js';
 
 export function createGame({ numDecks = 6, rng = Math.random } = {}) {
   return {
@@ -170,10 +149,23 @@ export function applyPlayerAction(game, hand, playerAction) {
   const analytics = buildDecisionAnalytics(game.shoe, game.numDecks, hand.dealerHoleCard ? [hand.dealerHoleCard] : []);
 
   const expected = basicStrategyAction(handType, key, hand.dealerUpcard);
-  const exact = exactOptimalAction({ handType, key, dealerUpcard: hand.dealerUpcard, trueCount: analytics.true_count });
 
   const isCorrect = playerAction === expected;
-  const evLoss = estimateHeuristicEvLoss(playerAction, expected) * active.bet;
+
+  // Cálculo real de EV (motor combinatorio/probabilístico, ver ev-engine.js)
+  const legalActionsForEV = availableActions(hand, Infinity);
+  const pairRank = isPair ? (active.cards[0].rank === 'A' ? 'A' : normalizeDealerUpcard(active.cards[0].rank)) : null;
+  const evResult = computeExactEV({
+    playerTotal: total,
+    playerIsSoft: isSoft,
+    isPair,
+    pairRank,
+    composition: analytics.remaining_composition,
+    dealerUpcardRank: normalizeDealerUpcard(hand.dealerUpcard),
+    legalActions: legalActionsForEV,
+  });
+  const evChosen = evResult.evByAction[playerAction] ?? evResult.bestEV;
+  const evLoss = Math.max(0, (evResult.bestEV - evChosen) * active.bet);
 
   const decisionRecord = {
     playerHandIndex: hand.activeHandIndex,
@@ -181,15 +173,15 @@ export function applyPlayerAction(game, hand, playerAction) {
     dealerUpcard: hand.dealerUpcard,
     playerTotal: total,
     handType,
-    availableActions: availableActions(hand, Infinity), // Infinity: no filtrar por bankroll aquí, solo registrar el set de reglas
+    availableActions: legalActionsForEV,
     playerAction,
     expectedAction: expected,
     isCorrect,
     evLoss,
     remainingComposition: analytics.remaining_composition,
-    evOptimalActionExact: null, // placeholder — requiere motor de EV real
-    optimalActionExact: exact.action,
-    deviatedFromBasicTable: exact.deviated,
+    evOptimalActionExact: evResult.bestEV,
+    optimalActionExact: evResult.bestAction,
+    deviatedFromBasicTable: evResult.bestAction !== expected,
     runningCount: analytics.running_count,
     trueCount: analytics.true_count,
   };
