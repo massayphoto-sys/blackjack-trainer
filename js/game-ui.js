@@ -161,11 +161,11 @@ export class BlackjackTableController {
   async finishHand() {
     try {
       if (!this.hand.naturalBlackjackResolved) playDealerHand(this.game, this.hand);
-      const { handResults, totalProfit } = resolveHandResults(this.hand);
+      const { handResults, totalProfit, insuranceProfit } = resolveHandResults(this.hand);
       this.bankroll += totalProfit;
       updateStreak(this.game, totalProfit);
       this.bestStreak = Math.max(this.bestStreak, this.game.currentStreak);
-      this.lastHandResults = { handResults, totalProfit };
+      this.lastHandResults = { handResults, totalProfit, insuranceProfit };
 
       await repo.saveResolvedHand({
         sessionId: this.session.id,
@@ -263,6 +263,7 @@ export class BlackjackTableController {
     const streak = this.game.currentStreak;
     const dealerTotal = dealerVisible.length ? handValue(dealerVisible).total : 0;
     const results = this.lastHandResults?.handResults ?? null;
+    const insuranceProfit = this.lastHandResults?.insuranceProfit ?? 0;
     const activeHand = this.hand ? (this.hand.playerHands[this.hand.activeHandIndex] ?? this.hand.playerHands[0]) : null;
     const profitPct = this.profitPct();
 
@@ -294,7 +295,14 @@ export class BlackjackTableController {
                   <div class="card-row">${this.renderCards(h.cards)}</div>
                   <div class="total-pill">${handValue(h.cards).total}</div>
                 </div>
-                ${r ? `<div class="result-overlay"><span class="result-word ${r.result}">${RESULT_LABELS[r.result] || r.result.toUpperCase()}</span><span class="result-amount">${r.profit > 0 ? '+' : ''}$${r.profit.toFixed(2)}</span></div>` : ''}
+                ${r ? `<div class="result-overlay">
+                  <span class="result-word ${r.result}">${RESULT_LABELS[r.result] || r.result.toUpperCase()}</span>
+                  <span class="result-amount">${r.profit > 0 ? '+' : ''}$${r.profit.toFixed(2)}</span>
+                  ${insuranceProfit !== 0 ? `
+                    <span class="result-insurance">Seguro: ${insuranceProfit > 0 ? '+' : ''}$${insuranceProfit.toFixed(2)}</span>
+                    <span class="result-net">Neto: ${(r.profit + insuranceProfit) > 0 ? '+' : ''}$${(r.profit + insuranceProfit).toFixed(2)}</span>
+                  ` : ''}
+                </div>` : ''}
               </div>
             `;
           }).join('')}

@@ -222,6 +222,8 @@ button { cursor: pointer; }
 .result-word.loss { color: var(--danger); text-shadow: 0 0 20px rgba(201,72,72,.6); }
 .result-word.push { color: var(--warning); text-shadow: 0 0 20px rgba(243,201,105,.5); }
 .result-amount { font-family: var(--num); font-size: 13px; color: var(--muted); }
+.result-insurance { font-family: var(--num); font-size: 11px; color: var(--purple); }
+.result-net { font-family: var(--num); font-size: 12px; font-weight: 800; color: var(--text); }
 
 /* --- Apuesta --- */
 .bet-section { position: relative; z-index: 1; text-align: center; margin-top: 4px; }
