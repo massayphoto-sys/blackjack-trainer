@@ -125,13 +125,16 @@ export function isPastCutCard(shoe) {
 /** Suma el valor de una mano de blackjack, ajustando ases (11 -> 1) si se pasa de 21. */
 export function handValue(cards) {
   let total = cards.reduce((sum, c) => sum + RANK_VALUE[c.rank], 0);
-  let aces = cards.filter(c => c.rank === 'A').length;
-  while (total > 21 && aces > 0) {
+  const aces = cards.filter(c => c.rank === 'A').length;
+  let acesReduced = 0;
+  while (total > 21 && acesReduced < aces) {
     total -= 10;
-    aces--;
+    acesReduced++;
   }
-  const isSoft = cards.some(c => c.rank === 'A') && total <= 21 &&
-    cards.reduce((sum, c) => sum + RANK_VALUE[c.rank], 0) !== total;
+  // Suave = todavía queda al menos un As contando como 11 (no basta con
+  // que "hubo alguna reducción" — si el único As se redujo a 1, la mano
+  // ya es dura, aunque el total haya cambiado respecto a la suma cruda).
+  const isSoft = aces > acesReduced;
   return { total, isSoft, isBlackjack: cards.length === 2 && total === 21 };
 }
 
