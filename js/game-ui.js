@@ -25,6 +25,7 @@ export class BlackjackTableController {
     this.minimumBet = minimumBet;
     this.maximumBet = maximumBet;
     this.currentBet = minimumBet;
+    this.currentBet2 = minimumBet;
     this.session = null;
     this.currentShoeRow = null;
     this.hand = null;
@@ -117,15 +118,16 @@ export class BlackjackTableController {
       this.lastHandResults2 = null;
       await this.ensureShoe();
 
-      const totalStake = this.seat2Open ? this.currentBet * 2 : this.currentBet;
+      const totalStake = this.seat2Open ? this.currentBet + this.currentBet2 : this.currentBet;
       if (totalStake > this.bankroll) throw new Error('Saldo insuficiente. Compra más fichas o baja tu apuesta.');
 
       const previousBet = this.hand?.playerHands?.[0]?.bet ?? null;
+      const previousBet2 = this.hand2?.playerHands?.[0]?.bet ?? null;
 
       if (this.seat2Open) {
         const [h1, h2] = dealMultiSeatRound(this.game, [
           { betAmount: this.currentBet, bankrollBeforeHand: this.bankroll, previousBetAmount: previousBet },
-          { betAmount: this.currentBet, bankrollBeforeHand: this.bankroll, previousBetAmount: previousBet },
+          { betAmount: this.currentBet2, bankrollBeforeHand: this.bankroll, previousBetAmount: previousBet2 },
         ]);
         this.hand = h1;
         this.hand2 = h2;
@@ -332,6 +334,20 @@ export class BlackjackTableController {
     this.render();
   }
 
+  adjustBet2(delta) {
+    const next = this.currentBet2 + delta;
+    if (next < this.minimumBet || next > this.maximumBet || next > this.bankroll) return;
+    this.currentBet2 = next;
+    this.render();
+  }
+
+  setBetPercentOfBankroll2(pct) {
+    const raw = Math.round((this.bankroll * pct) / 5) * 5;
+    const clamped = Math.min(Math.max(raw, this.minimumBet), Math.min(this.maximumBet, this.bankroll));
+    this.currentBet2 = clamped;
+    this.render();
+  }
+
   profitPct() {
     if (this.bankrollStart <= 0) return 0;
     return Math.round(((this.bankroll - this.bankrollStart) / this.bankrollStart) * 1000) / 10;
@@ -471,7 +487,13 @@ export class BlackjackTableController {
 
         <div class="summary-panel">
           <div class="col"><div class="s-label">Saldo</div><div class="s-value">$${this.bankroll.toFixed(2)}</div></div>
-          <div class="col"><div class="s-label">Apuesta actual</div><div class="s-value">$${this.currentBet.toFixed(2)}</div></div>
+          <div class="col">
+            <div class="s-label">Apuesta actual</div>
+            ${this.hand2 || this.seat2Open ? `
+              <div class="s-value small">P1: $${this.currentBet.toFixed(2)}</div>
+              <div class="s-value small">P2: $${this.currentBet2.toFixed(2)}</div>
+            ` : `<div class="s-value">$${this.currentBet.toFixed(2)}</div>`}
+          </div>
           <div class="col">
             <div class="s-label">Rendimiento</div>
             <div class="s-value green">${profitPct > 0 ? '+' : ''}${profitPct}%</div>
@@ -479,6 +501,7 @@ export class BlackjackTableController {
           </div>
         </div>
 
+        ${this.seat2Open || this.hand2 ? `<div class="quick-bets-label">Puesto 1</div>` : ''}
         <div class="quick-bets">
           <button data-bet-delta="-10" type="button" ${resolved ? '' : 'disabled'}>-10</button>
           <button data-bet-delta="-1" type="button" ${resolved ? '' : 'disabled'}>-1</button>
@@ -486,6 +509,17 @@ export class BlackjackTableController {
           <button data-bet-delta="1" type="button" ${resolved ? '' : 'disabled'}>+1</button>
           <button data-bet-delta="10" type="button" ${resolved ? '' : 'disabled'}>+10</button>
         </div>
+
+        ${this.seat2Open || this.hand2 ? `
+          <div class="quick-bets-label">Puesto 2</div>
+          <div class="quick-bets">
+            <button data-bet-delta2="-10" type="button" ${resolved ? '' : 'disabled'}>-10</button>
+            <button data-bet-delta2="-1" type="button" ${resolved ? '' : 'disabled'}>-1</button>
+            <button data-bet-pct2="0.5" type="button" ${resolved ? '' : 'disabled'}>50%</button>
+            <button data-bet-delta2="1" type="button" ${resolved ? '' : 'disabled'}>+1</button>
+            <button data-bet-delta2="10" type="button" ${resolved ? '' : 'disabled'}>+10</button>
+          </div>
+        ` : ''}
 
       </div>
     ` : '';
@@ -522,6 +556,9 @@ export class BlackjackTableController {
     this.root.querySelectorAll('[data-bet-delta]').forEach(btn => btn.addEventListener('click', () => this.adjustBet(Number(btn.dataset.betDelta))));
     const pctBtn = this.root.querySelector('[data-bet-pct]');
     if (pctBtn) pctBtn.addEventListener('click', () => this.setBetPercentOfBankroll(Number(pctBtn.dataset.betPct)));
+    this.root.querySelectorAll('[data-bet-delta2]').forEach(btn => btn.addEventListener('click', () => this.adjustBet2(Number(btn.dataset.betDelta2))));
+    const pctBtn2 = this.root.querySelector('[data-bet-pct2]');
+    if (pctBtn2) pctBtn2.addEventListener('click', () => this.setBetPercentOfBankroll2(Number(pctBtn2.dataset.betPct2)));
     this.root.querySelectorAll('[data-seat-count]').forEach(btn => {
       btn.addEventListener('click', () => this.chooseSeatCountAndDeal(Number(btn.dataset.seatCount)));
     });
