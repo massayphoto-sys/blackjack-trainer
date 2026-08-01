@@ -307,6 +307,7 @@ button { cursor: pointer; }
 .start-screen h1 { margin: 0; font-size: 24px; letter-spacing: -.02em; }
 .start-screen p { margin: 0; color: var(--muted); max-width: 300px; line-height: 1.5; font-size: 14px; }
 .start-screen button { padding: 14px 28px; border: 0; border-radius: 12px; background: var(--green-bright); color: #04110a; font-weight: 800; font-size: 15px; }
+.start-screen .secondary-start-btn { background: transparent; border: 1px solid var(--line); color: var(--text); }
 
 @media (min-width: 640px) {
   .table-screen { max-width: 480px; margin: 0 auto; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }

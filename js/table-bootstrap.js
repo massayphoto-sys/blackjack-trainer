@@ -5,11 +5,10 @@
 // fichas" / "Cambiar límites" cuando el jugador les da clic.
 
 import { getCurrentSession, subscribeToAuthChanges, signOut } from './auth.js';
-import { getMyProfile } from './game-repository.js';
+import { getMyProfile, getActiveSession } from './game-repository.js';
 import { BlackjackTableController } from './game-ui.js';
 
 const startScreen = document.getElementById('startScreen');
-const startButton = document.getElementById('startSessionButton');
 const tableRoot = document.getElementById('tableRoot');
 const tableScreen = document.getElementById('tableScreen');
 const playerNameLabel = document.getElementById('playerNameLabel');
@@ -101,29 +100,74 @@ function openBuyChipsSheet() {
   });
 }
 
-async function handleStart() {
-  startButton.disabled = true;
-  startButton.textContent = 'Preparando mesa…';
+function makeController() {
+  return new BlackjackTableController({
+    root: tableRoot,
+    playerName: myProfile?.display_name || '',
+    minimumBet: 20,
+    maximumBet: 2000,
+    onUpdate: handleUpdate,
+  });
+}
+
+async function handleStartNew(button) {
+  button.disabled = true;
+  button.textContent = 'Preparando mesa…';
   try {
-    controller = new BlackjackTableController({
-      root: tableRoot,
-      playerName: myProfile?.display_name || '',
-      minimumBet: 20,
-      maximumBet: 2000,
-      onUpdate: handleUpdate,
-    });
+    controller = makeController();
     await controller.startSession();
     startScreen.remove();
     await controller.dealNewHand();
   } catch (error) {
     console.error('No se pudo iniciar la mesa:', error);
-    startButton.disabled = false;
-    startButton.textContent = 'Empezar a entrenar';
+    button.disabled = false;
     alert(error?.message || 'No se pudo iniciar la mesa de juego.');
   }
 }
 
-if (startButton) startButton.addEventListener('click', handleStart);
+async function handleResume(button, activeSession) {
+  button.disabled = true;
+  button.textContent = 'Retomando…';
+  try {
+    controller = makeController();
+    controller.resumeSession(activeSession);
+    startScreen.remove();
+    await controller.dealNewHand();
+  } catch (error) {
+    console.error('No se pudo retomar la sesión:', error);
+    button.disabled = false;
+    alert(error?.message || 'No se pudo retomar la sesión.');
+  }
+}
+
+async function renderStartScreen() {
+  let activeSession = null;
+  try {
+    activeSession = await getActiveSession();
+  } catch (error) {
+    console.error('No se pudo revisar si había una sesión activa:', error);
+  }
+
+  if (activeSession) {
+    const bankroll = Number(activeSession.bankroll_start) + Number(activeSession.total_profit || 0);
+    startScreen.innerHTML = `
+      <h1>Tienes una sesión sin terminar</h1>
+      <p>Ibas con $${bankroll.toFixed(2)} de saldo y ${activeSession.total_hands || 0} manos jugadas. El zapato empieza de cero, pero tu saldo y estadísticas se retoman.</p>
+      <button id="resumeButton" type="button">Continuar sesión</button>
+      <button id="newSessionButton" type="button" class="secondary-start-btn">Empezar sesión nueva</button>
+    `;
+    document.getElementById('resumeButton').addEventListener('click', (e) => handleResume(e.target, activeSession));
+    document.getElementById('newSessionButton').addEventListener('click', (e) => handleStartNew(e.target));
+  } else {
+    startScreen.innerHTML = `
+      <h1>Listo para entrenar</h1>
+      <p>Cada mano que juegues se analiza y se guarda para medir tu criterio, no solo tu resultado.</p>
+      <button id="newSessionButton" type="button">Empezar a entrenar</button>
+    `;
+    document.getElementById('newSessionButton').addEventListener('click', (e) => handleStartNew(e.target));
+  }
+}
+
 if (buyChipsButton) buyChipsButton.addEventListener('click', openBuyChipsSheet);
 if (limitsButton) limitsButton.addEventListener('click', openLimitsSheet);
 if (reportsButton) reportsButton.addEventListener('click', () => { window.location.href = './reports.html'; });
@@ -144,6 +188,7 @@ async function guardSession(session) {
     myProfile = await getMyProfile();
     if (!myProfile?.display_name) { window.location.href = './index.html'; return; }
     playerNameLabel.textContent = myProfile.display_name;
+    if (!controller) await renderStartScreen();
   } catch (error) {
     console.error('No se pudo cargar el perfil:', error);
   }

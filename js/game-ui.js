@@ -44,6 +44,29 @@ export class BlackjackTableController {
     this.sessionStartedAt = Date.now();
   }
 
+  /**
+   * Retoma una sesión activa existente (mismo session_id, saldo real,
+   * estadísticas acumuladas) en vez de crear una nueva. El zapato SÍ
+   * empieza de cero — no se guarda la posición exacta dentro de un
+   * zapato entre recargas de página, solo el estado de la sesión.
+   */
+  resumeSession(sessionRow) {
+    this.session = sessionRow;
+    this.bankrollStart = Number(sessionRow.bankroll_start);
+    this.bankroll = this.bankrollStart + Number(sessionRow.total_profit || 0);
+    this.minimumBet = Number(sessionRow.minimum_bet);
+    this.maximumBet = Number(sessionRow.maximum_bet);
+    this.currentBet = Math.min(Math.max(this.currentBet, this.minimumBet), this.maximumBet);
+    this.sessionTotals = {
+      totalHands: sessionRow.total_hands || 0,
+      correctDecisions: sessionRow.correct_decisions || 0,
+      incorrectDecisions: sessionRow.incorrect_decisions || 0,
+      totalProfit: Number(sessionRow.total_profit || 0),
+      totalEvLoss: Number(sessionRow.total_ev_loss || 0),
+    };
+    this.sessionStartedAt = new Date(sessionRow.started_at).getTime();
+  }
+
   async ensureShoe() {
     if (shoeNeedsReplacement(this.game)) {
       if (this.game.shoe && this.currentShoeRow) {

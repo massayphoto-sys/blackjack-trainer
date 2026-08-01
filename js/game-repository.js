@@ -243,3 +243,20 @@ export async function getFatigueStreakData() {
   if (error) throw error;
   return data;
 }
+
+/** Busca una sesión de entrenamiento activa (sin cerrar) del usuario, si existe. */
+export async function getActiveSession() {
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) throw new Error('No hay sesión activa.');
+
+  const { data, error } = await supabase
+    .from('training_sessions')
+    .select('*')
+    .eq('profile_id', user.id)
+    .eq('status', 'active')
+    .order('started_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
