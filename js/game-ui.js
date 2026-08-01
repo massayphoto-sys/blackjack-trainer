@@ -88,12 +88,12 @@ export class BlackjackTableController {
     }
   }
 
-  /** Elige 1 o 2 puestos para la PRÓXIMA mano — solo aparece cuando no hay mano en curso. */
-  setSeatCount(count) {
+  /** Elige 1 o 2 puestos Y reparte la próxima mano en el mismo toque — un solo tap, sin ventana de tiempo entre elegir y repartir. */
+  async chooseSeatCountAndDeal(count) {
     if (this.currentActiveTarget()) return; // protección extra: nunca cambiar mientras hay una mano sin terminar
     this.seat2Open = count === 2;
     if (!this.seat2Open) this.hand2 = null;
-    this.render();
+    await this.dealNewHand();
   }
 
   /** ¿Ya se resolvieron todos los puestos que tienen mano repartida en esta ronda? */
@@ -455,11 +455,10 @@ export class BlackjackTableController {
           <button class="next-hand-btn" data-retry-deal type="button">Reintentar</button>
         ` : resolved && bothResultsReady ? `
           <div class="seat-count-picker">
-            <span class="seat-count-label">Próxima mano:</span>
+            <span class="seat-count-label">Siguiente mano:</span>
             <button class="seat-count-btn ${!this.seat2Open ? 'selected' : ''}" data-seat-count="1" type="button">1 puesto</button>
             <button class="seat-count-btn ${this.seat2Open ? 'selected' : ''}" data-seat-count="2" type="button">2 puestos</button>
           </div>
-          <button class="next-hand-btn" data-next-hand type="button">Siguiente mano</button>
         ` : `
           <div class="action-row">
             <button class="action-btn double" data-action="double" ${legal.includes('double') ? '' : 'disabled'}><span class="icon">2x</span>DOBLAR</button>
@@ -524,7 +523,7 @@ export class BlackjackTableController {
     const pctBtn = this.root.querySelector('[data-bet-pct]');
     if (pctBtn) pctBtn.addEventListener('click', () => this.setBetPercentOfBankroll(Number(pctBtn.dataset.betPct)));
     this.root.querySelectorAll('[data-seat-count]').forEach(btn => {
-      btn.addEventListener('click', () => this.setSeatCount(Number(btn.dataset.seatCount)));
+      btn.addEventListener('click', () => this.chooseSeatCountAndDeal(Number(btn.dataset.seatCount)));
     });
   }
 
