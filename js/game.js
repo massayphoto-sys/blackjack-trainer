@@ -162,7 +162,9 @@ export function applyPlayerAction(game, hand, playerAction) {
   const handType = isPair ? 'pair' : (isSoft ? 'soft' : 'hard');
   const key = isPair
     ? (active.cards[0].rank === 'A' ? 'A' : normalizeDealerUpcard(active.cards[0].rank))
-    : total;
+    : isSoft
+      ? total - 11 // A-2 → 2, A-9 → 9 (el valor que acompaña al As, no el total completo)
+      : total;
 
   // Analítica ANTES de repartir la carta de esta decisión
   const analytics = buildDecisionAnalytics(game.shoe, game.numDecks, hand.dealerHoleCard ? [hand.dealerHoleCard] : []);
