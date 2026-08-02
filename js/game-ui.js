@@ -766,24 +766,7 @@ export class BlackjackTableController {
         </div>
       </div>
 
-      ${this.tableMode === 'multi' && this.tableOrder.some(e => e.type === 'bot') ? `
-        <div class="bot-seats-row">
-          ${this.tableOrder.filter(e => e.type === 'bot').map(entry => {
-            if (!entry.hand) return '';
-            const total = handValue(entry.hand.playerHands[0].cards).total;
-            const status = entry.hand.playerHands[0].status;
-            const statusLabel = status === 'active' ? '' : status === 'bust' ? 'se pasó' : status === 'win' || status === 'blackjack_win' ? 'ganó' : status === 'loss' || status === 'dealer_blackjack' ? 'perdió' : status === 'push' ? 'empate' : '';
-            return `
-              <div class="bot-seat">
-                <div class="bot-seat-name">🤖 ${entry.botName} · P${entry.position}</div>
-                <div class="bot-seat-cards">${this.renderCards(entry.hand.playerHands[0].cards)}</div>
-                <div class="bot-seat-total">${total}${statusLabel ? ` · ${statusLabel}` : ''}</div>
-              </div>
-            `;
-          }).join('')}
-        </div>
-      ` : ''}
-
+      ${this.tableMode === 'multi' ? this.renderSixSeatGrid(activeTarget, results, results2, insuranceProfit) : `
       <div class="seats-row">
         <div class="seat">
           <div class="seat-label">${this.seat2Open ? 'Puesto 1' : 'Tú'}</div>
@@ -837,6 +820,7 @@ export class BlackjackTableController {
           </div>
         ` : ''}
       </div>
+      `}
 
       <div class="dock">
         ${this.cutCardLandedOn ? `<div class="cut-card-banner">🔴 Salió la carta de corte en ${this.cutCardLandedOn.label} — ${this.cutCardLandedOn.type === 'bot' ? `${this.cutCardLandedOn.botName} cortará el próximo zapato.` : 'el próximo zapato se corta después de esta mano.'}</div>` : ''}
@@ -1092,6 +1076,76 @@ export class BlackjackTableController {
     if (confirmBtn) confirmBtn.addEventListener('click', () => this.confirmCut(this.pendingCutPct));
     const continueBtn = this.root.querySelector('[data-continue-after-cut]');
     if (continueBtn) continueBtn.addEventListener('click', () => this.continueAfterCut());
+  }
+
+  /**
+   * Layout de 6 puestos alrededor de la mesa, como en una mesa real:
+   * 1 y 6 arriba, 2 y 5 al medio, 3 y 4 abajo. Cada puesto muestra sus
+   * cartas si está ocupado (jugador o bot), o queda vacío con solo el
+   * número si nadie se sentó ahí.
+   */
+  renderSixSeatGrid(activeTarget, results, results2, insuranceProfit) {
+    const order = [1, 6, 2, 5, 3, 4];
+    const slots = order.map(pos => this.renderOneTableSeat(pos, activeTarget, results, results2, insuranceProfit)).join('');
+    return `<div class="table-seats-grid">${slots}</div>`;
+  }
+
+  renderOneTableSeat(position, activeTarget, results, results2, insuranceProfit) {
+    const entry = this.tableOrder.find(e => e.position === position);
+    if (!entry || !entry.hand) {
+      return `
+        <div class="table-seat-slot empty">
+          <div class="table-seat-badge">${position}</div>
+        </div>
+      `;
+    }
+
+    const isPlayer = entry.type === 'player';
+    const hand = entry.hand;
+    const seatResults = isPlayer ? (entry.slot === 'hand' ? results : results2) : null;
+    const label = isPlayer ? `PUESTO ${position} · TÚ` : `PUESTO ${position} · 🤖 ${entry.botName}`;
+
+    const handsHtml = hand.playerHands.map((h, i) => {
+      const r = seatResults ? seatResults[i] : null;
+      let cls = '';
+      if (r) {
+        cls = r.result;
+      } else if (isPlayer && activeTarget === entry.slot && i === hand.activeHandIndex) {
+        cls = 'active';
+      } else if (!isPlayer) {
+        const status = h.status;
+        if (status === 'bust') cls = 'loss';
+        else if (status === 'win' || status === 'blackjack_win') cls = 'win';
+        else if (status === 'loss' || status === 'dealer_blackjack') cls = 'loss';
+        else if (status === 'push') cls = 'push';
+      }
+      return `
+        <div class="hand-slot ${cls}">
+          ${hand.playerHands.length > 1 ? `<div class="hand-slot-label">Jugada ${i + 1}</div>` : ''}
+          <div class="seat-row">
+            <div class="card-row">${this.renderCards(h.cards)}</div>
+            <div class="total-pill">${handValue(h.cards).total}</div>
+          </div>
+          ${r ? `<div class="result-overlay">
+            <span class="result-word ${r.result}">${RESULT_LABELS[r.result] || r.result.toUpperCase()}</span>
+            <span class="result-amount">${r.profit > 0 ? '+' : ''}$${r.profit.toFixed(2)}</span>
+            ${isPlayer && insuranceProfit !== 0 ? `
+              <span class="result-insurance">Seguro: ${insuranceProfit > 0 ? '+' : ''}$${insuranceProfit.toFixed(2)}</span>
+              <span class="result-net">Neto: ${(r.profit + insuranceProfit) > 0 ? '+' : ''}$${(r.profit + insuranceProfit).toFixed(2)}</span>
+            ` : ''}
+          </div>` : ''}
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="table-seat-slot">
+        <div class="table-seat-label">${label}</div>
+        <div class="hands-row">${handsHtml}</div>
+        <div class="table-seat-badge">${position}</div>
+        <div class="table-seat-chip"></div>
+      </div>
+    `;
   }
 
   renderCards(cards) {
