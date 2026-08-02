@@ -324,6 +324,31 @@ button { cursor: pointer; }
 .start-screen button { padding: 14px 28px; border: 0; border-radius: 12px; background: var(--green-bright); color: #04110a; font-weight: 800; font-size: 15px; }
 .start-screen .secondary-start-btn { background: transparent; border: 1px solid var(--line); color: var(--text); }
 
+.cut-ritual { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 24px; text-align: center; }
+.cut-ritual-icon { font-size: 36px; }
+.cut-ritual h2 { margin: 0; font-size: 20px; letter-spacing: -.02em; }
+.cut-ritual p { margin: 0; color: var(--muted); max-width: 300px; line-height: 1.5; font-size: 14px; }
+.cut-ritual .next-hand-btn { padding: 14px 28px; border: 0; border-radius: 12px; background: var(--green-bright); color: #04110a; font-weight: 800; font-size: 15px; }
+
+.cut-deck {
+  position: relative; width: 100%; max-width: 320px; height: 90px;
+  background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,0));
+  border: 1px solid var(--line-soft); border-radius: 12px; cursor: grab; overflow: hidden;
+  touch-action: none; /* evita que el navegador intente hacer scroll mientras se arrastra la tarjeta */
+}
+.cut-deck-stack { position: absolute; inset: 0; }
+.cut-deck-card {
+  position: absolute; top: 8px; bottom: 8px; width: 14px;
+  background: var(--card-bg); border-radius: 3px; box-shadow: 1px 0 0 rgba(0,0,0,.2);
+}
+.cut-marker {
+  position: absolute; top: -6px; bottom: -6px; width: 6px; margin-left: -3px;
+  background: var(--danger); border-radius: 3px; box-shadow: 0 0 12px rgba(201,72,72,.7);
+  transition: left .12s ease-out;
+}
+.cut-hint { font-size: 12px; color: var(--muted); }
+.cut-burned-card { display: flex; justify-content: center; }
+
 @media (min-width: 640px) {
   .table-screen { max-width: 480px; margin: 0 auto; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
 }

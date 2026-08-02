@@ -8,6 +8,7 @@ import {
   createGame, dealInitialRound, dealMultiSeatRound, availableActions, applyPlayerAction,
   allPlayerHandsResolved, playDealerHand, playDealerHandMultiSeat, resolveInsurance,
   resolveHandResults, updateStreak, shoeNeedsReplacement, startNewShoe,
+  beginShoeShuffle, confirmShoeCut,
 } from './game.js';
 import { handValue } from './deck.js';
 import * as repo from './game-repository.js';
@@ -32,6 +33,9 @@ export class BlackjackTableController {
     this.seat2Open = false;
     this.hand2 = null;
     this.lastHandResults2 = null;
+    this.awaitingCut = false;
+    this.burnedCardPreview = null;
+    this.pendingCutPct = null;
     this.lastError = null;
     this.lastHandResults = null;
     this.sessionStartedAt = null;
@@ -76,17 +80,42 @@ export class BlackjackTableController {
     this.game.shoeNumber = await repo.getShoeCountForSession(sessionRow.id);
   }
 
-  async ensureShoe() {
-    if (shoeNeedsReplacement(this.game)) {
-      if (this.game.shoe && this.currentShoeRow) {
-        await repo.saveShoe({
-          id: this.currentShoeRow.id, sessionId: this.session.id, shoeNumber: this.game.shoeNumber,
-          shoe: this.game.shoe, endedAt: new Date().toISOString(),
-        });
-      }
-      startNewShoe(this.game);
-      this.currentShoeRow = await repo.saveShoe({ sessionId: this.session.id, shoeNumber: this.game.shoeNumber, shoe: this.game.shoe });
+  /**
+   * Arranca el ritual de corte: guarda el zapato anterior (si había),
+   * baraja uno nuevo y lo deja pendiente de que el jugador elija dónde
+   * cortar — la mesa muestra la pantalla de corte en vez de repartir.
+   */
+  async startCutRitual() {
+    if (this.game.shoe && this.currentShoeRow) {
+      await repo.saveShoe({
+        id: this.currentShoeRow.id, sessionId: this.session.id, shoeNumber: this.game.shoeNumber,
+        shoe: this.game.shoe, endedAt: new Date().toISOString(),
+      });
     }
+    beginShoeShuffle(this.game);
+    this.awaitingCut = true;
+    this.burnedCardPreview = null;
+    this.pendingCutPct = 0.5; // la tarjeta roja arranca visible en el centro, lista para deslizarse
+    this.render();
+  }
+
+  /** El jugador tocó un punto del mazo (0 a 1) para insertar la tarjeta roja. */
+  async confirmCut(pct) {
+    if (!this.game.pendingShoeCards) return;
+    const clamped = Math.min(Math.max(pct, 0.05), 0.95); // no dejar cortar en el borde extremo
+    const cutPosition = Math.floor(this.game.pendingShoeCards.totalCards * clamped);
+    const burned = confirmShoeCut(this.game, cutPosition);
+    this.burnedCardPreview = burned;
+    this.pendingCutPct = null;
+    this.currentShoeRow = await repo.saveShoe({ sessionId: this.session.id, shoeNumber: this.game.shoeNumber, shoe: this.game.shoe });
+    this.render();
+  }
+
+  /** El jugador ya vio la carta quemada — arranca el reparto normal del zapato nuevo. */
+  async continueAfterCut() {
+    this.awaitingCut = false;
+    this.burnedCardPreview = null;
+    await this.dealNewHand();
   }
 
   /** Elige 1 o 2 puestos Y reparte la próxima mano en el mismo toque — un solo tap, sin ventana de tiempo entre elegir y repartir. */
@@ -116,7 +145,11 @@ export class BlackjackTableController {
       this.lastError = null;
       this.lastHandResults = null;
       this.lastHandResults2 = null;
-      await this.ensureShoe();
+
+      if (shoeNeedsReplacement(this.game)) {
+        await this.startCutRitual();
+        return; // el reparto real sigue después de que el jugador corte (continueAfterCut)
+      }
 
       const totalStake = this.seat2Open ? this.currentBet + this.currentBet2 : this.currentBet;
       if (totalStake > this.bankroll) throw new Error('Saldo insuficiente. Compra más fichas o baja tu apuesta.');
@@ -371,6 +404,11 @@ export class BlackjackTableController {
   render() {
     if (!this.root) return;
 
+    if (this.awaitingCut) {
+      this.renderCutRitual();
+      return;
+    }
+
     const resolved = this.bothSeatsResolved();
     if (this.hand && !resolved && !this.hand.naturalBlackjackResolved && this.decisionStartedAt === null) {
       this.decisionStartedAt = Date.now();
@@ -562,6 +600,79 @@ export class BlackjackTableController {
     this.root.querySelectorAll('[data-seat-count]').forEach(btn => {
       btn.addEventListener('click', () => this.chooseSeatCountAndDeal(Number(btn.dataset.seatCount)));
     });
+  }
+
+  renderCutRitual() {
+    const totalCards = this.game.pendingShoeCards?.totalCards ?? 0;
+
+    if (this.burnedCardPreview) {
+      // Paso 2: ya se cortó — mostrar la carta quemada.
+      this.root.innerHTML = `
+        <div class="cut-ritual">
+          <div class="cut-ritual-icon">🔥</div>
+          <h2>Se quema la primera carta</h2>
+          <p>Así se hace en cualquier mesa real, después de cortar.</p>
+          <div class="cut-burned-card">${this.renderCards([this.burnedCardPreview])}</div>
+          <button class="next-hand-btn" data-continue-after-cut type="button">Empezar a repartir</button>
+        </div>
+      `;
+    } else {
+      // Paso 1: elegir dónde cortar, deslizando la tarjeta roja.
+      const pct = this.pendingCutPct ?? 0.5;
+      this.root.innerHTML = `
+        <div class="cut-ritual">
+          <h2>Corta el zapato</h2>
+          <p>Desliza la tarjeta roja hacia donde quieras cortar.</p>
+          <div class="cut-deck" data-cut-deck>
+            <div class="cut-deck-stack">
+              ${Array.from({ length: 24 }, (_, i) => `<div class="cut-deck-card" style="left:${(i / 24) * 100}%"></div>`).join('')}
+            </div>
+            <div class="cut-marker" data-cut-marker style="left:${pct * 100}%"></div>
+          </div>
+          <div class="cut-hint" data-cut-hint>${totalCards} cartas — cortando al ${(pct * 100).toFixed(0)}%</div>
+          <button class="next-hand-btn" data-confirm-cut type="button">Cortar aquí</button>
+        </div>
+      `;
+    }
+
+    this.wireCutRitualEvents();
+    this.emitUpdate();
+  }
+
+  wireCutRitualEvents() {
+    const deck = this.root.querySelector('[data-cut-deck]');
+    const marker = this.root.querySelector('[data-cut-marker]');
+    const hint = this.root.querySelector('[data-cut-hint]');
+    if (deck && marker) {
+      let dragging = false;
+
+      const updateFromPointer = (e) => {
+        const rect = deck.getBoundingClientRect();
+        const raw = (e.clientX - rect.left) / rect.width;
+        const pct = Math.min(Math.max(raw, 0.05), 0.95);
+        this.pendingCutPct = pct;
+        // Actualiza el DOM directamente (sin llamar a render()) para que
+        // el arrastre se sienta fluido en vez de redibujar todo en cada
+        // movimiento del dedo.
+        marker.style.left = `${pct * 100}%`;
+        if (hint) hint.textContent = `${this.game.pendingShoeCards?.totalCards ?? 0} cartas — cortando al ${(pct * 100).toFixed(0)}%`;
+      };
+
+      deck.addEventListener('pointerdown', (e) => {
+        dragging = true;
+        deck.setPointerCapture(e.pointerId);
+        updateFromPointer(e);
+      });
+      deck.addEventListener('pointermove', (e) => {
+        if (dragging) updateFromPointer(e);
+      });
+      deck.addEventListener('pointerup', () => { dragging = false; });
+      deck.addEventListener('pointercancel', () => { dragging = false; });
+    }
+    const confirmBtn = this.root.querySelector('[data-confirm-cut]');
+    if (confirmBtn) confirmBtn.addEventListener('click', () => this.confirmCut(this.pendingCutPct));
+    const continueBtn = this.root.querySelector('[data-continue-after-cut]');
+    if (continueBtn) continueBtn.addEventListener('click', () => this.continueAfterCut());
   }
 
   renderCards(cards) {
