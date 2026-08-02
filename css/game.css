@@ -155,6 +155,11 @@ button { cursor: pointer; }
 .felt-watermark .fw-rules { font-size: 8px; letter-spacing: .06em; margin-top: 6px; line-height: 1.6; }
 
 .seats-row { display: flex; flex-direction: row-reverse; justify-content: center; align-items: flex-start; gap: 18px; flex-wrap: wrap; }
+.bot-seats-row { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; padding: 6px 10px; }
+.bot-seat { display: flex; flex-direction: column; align-items: center; gap: 3px; opacity: .8; transform: scale(.72); transform-origin: top center; }
+.bot-seat-name { font-size: 10px; font-weight: 700; color: var(--muted); white-space: nowrap; }
+.bot-seat-cards { display: flex; }
+.bot-seat-total { font-family: var(--num); font-size: 11px; font-weight: 800; color: var(--muted); }
 .seat { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .seat-label { font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: #cfe3d5; display: flex; align-items: center; justify-content: center; gap: 8px; }
 
@@ -256,6 +261,10 @@ button { cursor: pointer; }
   background: var(--danger-dark); border: 1px solid rgba(201,72,72,.5); color: #ff9d9d;
   padding: 9px 12px; border-radius: 10px; font-size: 11px; margin-bottom: 8px;
 }
+.cut-card-banner {
+  background: rgba(201,72,72,.12); border: 1px solid rgba(201,72,72,.4); color: #ffb3b3;
+  padding: 9px 12px; border-radius: 10px; font-size: 11px; margin-bottom: 8px; text-align: center;
+}
 .action-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; margin-bottom: 10px; }
 .action-btn {
   padding: 10px 2px 9px; border: 0; border-radius: 12px; color: #fff;
@@ -347,6 +356,16 @@ button { cursor: pointer; }
   transition: left .12s ease-out;
 }
 .cut-hint { font-size: 12px; color: var(--muted); }
+
+.table-setup-choices { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+.table-setup-choices.wrap { max-width: 320px; }
+.cut-ritual .next-hand-btn.secondary { background: transparent; border: 1px solid var(--line); color: var(--text); }
+.table-seat-map { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; max-width: 220px; }
+.table-seat-btn {
+  width: 60px; height: 60px; border-radius: 12px; border: 1px solid var(--line-soft);
+  background: rgba(255,255,255,.04); color: var(--text); font-family: var(--num); font-weight: 800; font-size: 20px;
+}
+.table-seat-btn.selected { background: var(--green-bright); color: #04110a; border-color: var(--green-bright); }
 .cut-burned-card { display: flex; justify-content: center; }
 
 @media (min-width: 640px) {
