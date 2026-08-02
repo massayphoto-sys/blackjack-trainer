@@ -441,6 +441,12 @@ export class BlackjackTableController {
         this.tableOrder.forEach((entry, i) => {
           entry.hand = hands[i];
           if (entry.type === 'player') this[entry.slot] = hands[i];
+          // v1: con varios puestos en la mesa (propios o de otros
+          // jugadores) el seguro se rechaza automáticamente — preguntarlo
+          // por separado a cada puesto queda para una siguiente iteración.
+          if (entry.type === 'player' && entry.hand.insurance?.offered) {
+            resolveInsurance(entry.hand, false, 0);
+          }
         });
         this.tableOrderIndex = 0;
         this.render();
