@@ -72,10 +72,12 @@ export class BlackjackTableController {
     this.burnedCardPreview = null;
     this.pendingCutPct = null;
     this.awaitingTableSetup = false;
-    this.tableSetup = null; // { mode, ownSeatCount, ownPositions, botCount } — estado temporal mientras se elige
+    this.tableSetup = null; // { mode, position, botCount } — estado temporal mientras se elige
     this.tableMode = 'solo'; // 'solo' | 'multi' — se pregunta una vez por zapato
     this.tableOrder = []; // array ordenado por posición: [{ position, type: 'player'|'bot', slot?, botName?, hand }]
     this.tableOrderIndex = 0;
+    this.playerPrimaryPosition = null; // puesto fijo del jugador en la mesa multi, para todo el zapato
+    this.wantsSecondSeat = false; // se decide cada mano, no al configurar la mesa
     this.botRosterPool = []; // bots del roster de 10 que no están sentados ahora mismo — candidatos para llenar una vacante
     this.vacantBotPositions = []; // posiciones donde un bot se retiró sin fichas — pueden llenarse con otro más adelante
     this.cutCardLandedOn = null; // etiqueta de quién recibió la carta de corte en esta mano (se anuncia, no interrumpe el reparto)
@@ -174,7 +176,7 @@ export class BlackjackTableController {
   async continueAfterCut() {
     this.awaitingCut = false;
     this.burnedCardPreview = null;
-    this.showTableSetup();
+    await this.dealNewHand();
   }
 
   /**
@@ -237,6 +239,9 @@ export class BlackjackTableController {
 
       if (!this.cutCardLandedOn) this.cutCardLandedOn = this.detectCutCardLanding();
 
+      // El puesto temporal (si se jugó un segundo esta mano) no queda fijo — se decide de nuevo la próxima mano.
+      this.tableOrder = this.tableOrder.filter(e => !e.temporary);
+
       // Los bots que se quedaron sin fichas suficientes para la mínima se retiran — su puesto queda vacante.
       const leaving = this.tableOrder.filter(e => e.type === 'bot' && e.bankroll < this.minimumBet);
       if (leaving.length) {
@@ -257,7 +262,7 @@ export class BlackjackTableController {
   }
   showTableSetup() {
     this.awaitingTableSetup = true;
-    this.tableSetup = { mode: null, ownSeatCount: null, ownPositions: [], botCount: null };
+    this.tableSetup = { mode: null, position: null, botCount: null };
     this.render();
   }
 
@@ -268,23 +273,15 @@ export class BlackjackTableController {
       this.tableOrder = [];
       this.awaitingTableSetup = false;
       this.tableSetup = null;
-      this.dealNewHand();
+      this.startCutRitual(); // el corte viene después de decidir el modo, no el reparto directo
       return;
     }
     this.render();
   }
 
-  chooseOwnSeatCount(count) {
-    this.tableSetup.ownSeatCount = count;
-    this.tableSetup.ownPositions = [];
-    this.render();
-  }
-
-  toggleOwnPosition(position) {
-    const positions = this.tableSetup.ownPositions;
-    const idx = positions.indexOf(position);
-    if (idx >= 0) positions.splice(idx, 1);
-    else if (positions.length < this.tableSetup.ownSeatCount) positions.push(position);
+  /** Un solo puesto fijo para toda la sesión — jugar un segundo puesto se decide cada mano, no aquí. */
+  choosePosition(position) {
+    this.tableSetup.position = position;
     this.render();
   }
 
@@ -293,7 +290,6 @@ export class BlackjackTableController {
     this.render();
   }
 
-  /** A partir de lo elegido, arma el orden real de la mesa (por posición) y reparte. */
   /**
    * Si el zapato ya cruzó la carta de corte en esta mano, busca en qué
    * puesto cayó exactamente esa carta (por identidad, no por posición
@@ -354,18 +350,17 @@ export class BlackjackTableController {
   }
 
   async confirmTableSetupAndDeal() {
-    const { ownPositions, botCount } = this.tableSetup;
+    const { position, botCount } = this.tableSetup;
     this.tableMode = 'multi';
-    const sortedOwn = ownPositions.slice().sort((a, b) => a - b);
-    const availableForBots = [1, 2, 3, 4, 5, 6].filter(p => !sortedOwn.includes(p));
+    this.playerPrimaryPosition = position; // el puesto fijo del jugador para todo este zapato
+    const availableForBots = [1, 2, 3, 4, 5, 6].filter(p => p !== position);
     const botPositions = availableForBots.slice(0, botCount);
 
     const shuffledRoster = BOT_ROSTER.slice().sort(() => Math.random() - 0.5);
     const chosenBots = shuffledRoster.slice(0, botPositions.length);
     this.botRosterPool = shuffledRoster.slice(botPositions.length); // el resto queda disponible para reemplazos futuros
 
-    const order = [];
-    sortedOwn.forEach((p, i) => order.push({ position: p, type: 'player', slot: i === 0 ? 'hand' : 'hand2', hand: null }));
+    const order = [{ position, type: 'player', slot: 'hand', hand: null }];
     botPositions.forEach((p, i) => order.push({
       position: p, type: 'bot', hand: null,
       botName: chosenBots[i].name, precision: chosenBots[i].precision,
@@ -373,17 +368,34 @@ export class BlackjackTableController {
     }));
     order.sort((a, b) => a.position - b.position);
     this.tableOrder = order;
+    this.hand2 = null; // el segundo puesto (si se juega) se decide mano a mano, no aquí
     this.awaitingTableSetup = false;
     this.tableSetup = null;
-    await this.dealNewHand();
+    await this.startCutRitual(); // el corte del zapato viene después de configurar la mesa
   }
 
   /** Elige 1 o 2 puestos Y reparte la próxima mano en el mismo toque — un solo tap, sin ventana de tiempo entre elegir y repartir. */
   async chooseSeatCountAndDeal(count) {
     if (this.currentActiveTarget()) return; // protección extra: nunca cambiar mientras hay una mano sin terminar
-    this.seat2Open = count === 2;
-    if (!this.seat2Open) this.hand2 = null;
+    if (this.tableMode === 'multi') {
+      this.wantsSecondSeat = count === 2;
+    } else {
+      this.seat2Open = count === 2;
+      if (!this.seat2Open) this.hand2 = null;
+    }
     await this.dealNewHand();
+  }
+
+  /** El puesto libre justo antes o después del tuyo — el único lugar donde tendría sentido jugar un segundo puesto en la mesa real. null si ambos están ocupados. */
+  findAdjacentFreePosition() {
+    const p = this.playerPrimaryPosition;
+    if (!p) return null;
+    const occupied = new Set(this.tableOrder.map(e => e.position));
+    const next = p === 6 ? 1 : p + 1;
+    const prev = p === 1 ? 6 : p - 1;
+    if (!occupied.has(next)) return next;
+    if (!occupied.has(prev)) return prev;
+    return null;
   }
 
   /** ¿Ya se resolvieron todos los puestos que tienen mano repartida en esta ronda? */
@@ -415,12 +427,26 @@ export class BlackjackTableController {
       this.lastHandResults2 = null;
 
       if (shoeNeedsReplacement(this.game)) {
-        await this.startCutRitual();
-        return; // el reparto real sigue después de que el jugador corte (continueAfterCut)
+        this.showTableSetup();
+        return; // el corte del zapato viene DESPUÉS de configurar la mesa (startCutRitual, llamado desde el flujo de configuración)
       }
 
       if (this.tableMode === 'multi' && this.tableOrder.length > 0) {
+        this.hand2 = null; // se vuelve a asignar más abajo solo si se juega un segundo puesto esta mano
         this.tryFillVacantSeat(); // antes de repartir: puede que un bot nuevo entre en un puesto que quedó vacío
+
+        // Jugar un segundo puesto se decide cada mano (no al configurar la
+        // mesa) — solo es posible si el puesto justo antes o después del
+        // tuyo está libre en este momento.
+        if (this.wantsSecondSeat) {
+          const adjacent = this.findAdjacentFreePosition();
+          if (adjacent) {
+            this.tableOrder.push({ position: adjacent, type: 'player', slot: 'hand2', hand: null, temporary: true });
+            this.tableOrder.sort((a, b) => a.position - b.position);
+          } else {
+            this.wantsSecondSeat = false; // no hay dónde — se juega solo el puesto propio esta mano
+          }
+        }
 
         const totalOwnStake = this.tableOrder
           .filter(e => e.type === 'player')
@@ -745,7 +771,7 @@ export class BlackjackTableController {
     const dealerTotal = dealerVisible.length ? handValue(dealerVisible).total : 0;
     const results = this.lastHandResults?.handResults ?? null;
     const results2 = this.lastHandResults2?.handResults ?? null;
-    const hasSecondOwnSeat = this.tableMode === 'multi' ? this.tableOrder.some(e => e.slot === 'hand2') : this.seat2Open;
+    const hasSecondOwnSeat = this.tableMode === 'multi' ? this.wantsSecondSeat : this.seat2Open;
     const bothResultsReady = Boolean(this.lastHandResults && (!hasSecondOwnSeat || this.lastHandResults2));
     const insuranceProfit = this.lastHandResults?.insuranceProfit ?? 0;
     const activeHand = this.hand ? (this.hand.playerHands[this.hand.activeHandIndex] ?? this.hand.playerHands[0]) : null;
@@ -828,15 +854,19 @@ export class BlackjackTableController {
 
         ${this.lastError && !legal.length && !(resolved && bothResultsReady) ? `
           <button class="next-hand-btn" data-retry-deal type="button">Reintentar</button>
-        ` : resolved && bothResultsReady ? (this.tableMode === 'multi' ? `
-          <button class="next-hand-btn" data-next-hand-multi type="button">Siguiente mano (misma mesa)</button>
-        ` : `
+        ` : resolved && bothResultsReady ? (() => {
+          const isMulti = this.tableMode === 'multi';
+          const selected1 = isMulti ? !this.wantsSecondSeat : !this.seat2Open;
+          const selected2 = isMulti ? this.wantsSecondSeat : this.seat2Open;
+          const secondSeatAvailable = !isMulti || Boolean(this.findAdjacentFreePosition());
+          return `
           <div class="seat-count-picker">
             <span class="seat-count-label">Siguiente mano:</span>
-            <button class="seat-count-btn ${!this.seat2Open ? 'selected' : ''}" data-seat-count="1" type="button">1 puesto</button>
-            <button class="seat-count-btn ${this.seat2Open ? 'selected' : ''}" data-seat-count="2" type="button">2 puestos</button>
+            <button class="seat-count-btn ${selected1 ? 'selected' : ''}" data-seat-count="1" type="button">1 puesto</button>
+            <button class="seat-count-btn ${selected2 ? 'selected' : ''}" data-seat-count="2" type="button" ${secondSeatAvailable ? '' : 'disabled'} title="${secondSeatAvailable ? '' : 'No hay puesto libre junto al tuyo ahora mismo'}">2 puestos</button>
           </div>
-        `) : `
+          ${isMulti ? `<div class="cut-hint">Puesto ${this.playerPrimaryPosition} — la mesa sigue igual, solo cambia si juegas 1 o 2 puestos.</div>` : ''}
+        `; })() : `
           <div class="action-row">
             <button class="action-btn double" data-action="double" ${legal.includes('double') ? '' : 'disabled'}><span class="icon">2x</span>DOBLAR</button>
             <button class="action-btn hit" data-action="hit" ${legal.includes('hit') ? '' : 'disabled'}><span class="icon">＋</span>PEDIR</button>
@@ -940,27 +970,18 @@ export class BlackjackTableController {
           <button class="next-hand-btn secondary" data-table-mode="multi" type="button">Con jugadores</button>
         </div>
       `;
-    } else if (s.ownSeatCount === null) {
-      inner = `
-        <h2>¿Cuántos puestos tuyos?</h2>
-        <p>El resto de la mesa (hasta 6 puestos) se llena con jugadores.</p>
-        <div class="table-setup-choices">
-          <button class="next-hand-btn" data-own-seat-count="1" type="button">1 puesto</button>
-          <button class="next-hand-btn secondary" data-own-seat-count="2" type="button">2 puestos</button>
-        </div>
-      `;
-    } else if (s.ownPositions.length < s.ownSeatCount) {
+    } else if (s.position === null) {
       inner = `
         <h2>Elige tu lugar en la mesa</h2>
-        <p>Toca ${s.ownSeatCount === 1 ? 'el puesto' : 'los puestos'} donde quieres sentarte (${s.ownPositions.length}/${s.ownSeatCount}).</p>
+        <p>Toca el puesto donde quieres sentarte.</p>
         <div class="table-seat-map">
           ${[1, 2, 3, 4, 5, 6].map(p => `
-            <button class="table-seat-btn ${s.ownPositions.includes(p) ? 'selected' : ''}" data-toggle-own-seat="${p}" type="button">${p}</button>
+            <button class="table-seat-btn" data-choose-position="${p}" type="button">${p}</button>
           `).join('')}
         </div>
       `;
     } else if (s.botCount === null) {
-      const maxBots = 6 - s.ownSeatCount;
+      const maxBots = 5; // los otros 5 puestos, además del tuyo
       inner = `
         <h2>¿Cuántos jugadores más?</h2>
         <p>Se sientan en los puestos que quedan libres.</p>
@@ -973,8 +994,8 @@ export class BlackjackTableController {
     } else {
       inner = `
         <h2>Mesa lista</h2>
-        <p>Tú: puesto${s.ownSeatCount > 1 ? 's' : ''} ${s.ownPositions.slice().sort((a, b) => a - b).join(' y ')} — ${s.botCount} jugador${s.botCount > 1 ? 'es' : ''} más en la mesa.</p>
-        <button class="next-hand-btn" data-confirm-table-setup type="button">Repartir</button>
+        <p>Tú: puesto ${s.position} — ${s.botCount} jugador${s.botCount > 1 ? 'es' : ''} más en la mesa.</p>
+        <button class="next-hand-btn" data-confirm-table-setup type="button">Continuar</button>
       `;
     }
 
@@ -986,10 +1007,8 @@ export class BlackjackTableController {
   wireTableSetupEvents() {
     this.root.querySelectorAll('[data-table-mode]').forEach(btn =>
       btn.addEventListener('click', () => this.chooseTableMode(btn.dataset.tableMode)));
-    this.root.querySelectorAll('[data-own-seat-count]').forEach(btn =>
-      btn.addEventListener('click', () => this.chooseOwnSeatCount(Number(btn.dataset.ownSeatCount))));
-    this.root.querySelectorAll('[data-toggle-own-seat]').forEach(btn =>
-      btn.addEventListener('click', () => this.toggleOwnPosition(Number(btn.dataset.toggleOwnSeat))));
+    this.root.querySelectorAll('[data-choose-position]').forEach(btn =>
+      btn.addEventListener('click', () => this.choosePosition(Number(btn.dataset.choosePosition))));
     this.root.querySelectorAll('[data-bot-count]').forEach(btn =>
       btn.addEventListener('click', () => this.chooseBotCount(Number(btn.dataset.botCount))));
     const confirmBtn = this.root.querySelector('[data-confirm-table-setup]');
