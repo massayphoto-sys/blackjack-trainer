@@ -156,12 +156,15 @@ button { cursor: pointer; }
 
 .seats-row { display: flex; flex-direction: row-reverse; justify-content: center; align-items: flex-start; gap: 18px; flex-wrap: wrap; }
 
-.table-seats-grid {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 16px 6px;
-  padding: 4px 6px 6px; align-items: start; position: relative; z-index: 1;
+.table-seats-diamond {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 4px 8px 6px; position: relative; z-index: 1;
+}
+.table-seats-row {
+  display: flex; flex-direction: row; justify-content: space-between; align-items: flex-start; gap: 8px;
 }
 .table-seat-slot {
-  display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0;
+  flex: 1 1 0; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0;
 }
 .table-seat-slot.empty { min-height: 40px; justify-content: center; opacity: .35; }
 .table-seat-num {

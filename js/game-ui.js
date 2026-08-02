@@ -18,6 +18,10 @@ import * as repo from './game-repository.js';
 // precisión (probabilidad de jugar la acción correcta de estrategia
 // básica; el resto de las veces elige otra acción legal al azar, para
 // simular jugadores reales con distinto nivel, no todos perfectos).
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 const BOT_ROSTER = [
   { name: 'Ada', precision: 0.95 },
   { name: 'Beto', precision: 0.60 },
@@ -78,6 +82,7 @@ export class BlackjackTableController {
     this.tableOrderIndex = 0;
     this.playerPrimaryPosition = null; // puesto fijo del jugador en la mesa multi, para todo el zapato
     this.wantsSecondSeat = false; // se decide cada mano, no al configurar la mesa
+    this.actionsLocked = false; // se ven las cartas, pero los botones esperan un momento antes de activarse
     this.botRosterPool = []; // bots del roster de 10 que no están sentados ahora mismo — candidatos para llenar una vacante
     this.vacantBotPositions = []; // posiciones donde un bot se retiró sin fichas — pueden llenarse con otro más adelante
     this.cutCardLandedOn = null; // etiqueta de quién recibió la carta de corte en esta mano (se anuncia, no interrumpe el reparto)
@@ -192,12 +197,18 @@ export class BlackjackTableController {
       if (entry.type === 'bot') {
         this.playBotHandFully(entry.hand, entry.precision);
         this.tableOrderIndex++;
+        this.render(); // se ve jugar a cada bot uno por uno, no todos de golpe
+        await sleep(450);
         continue;
       }
       if (allPlayerHandsResolved(entry.hand)) {
         this.tableOrderIndex++;
         continue;
       }
+      this.actionsLocked = true;
+      this.render(); // ya se ven tus cartas, pero los botones esperan un momento antes de activarse
+      await sleep(600);
+      this.actionsLocked = false;
       this.render();
       return; // le toca a este puesto del jugador — se detiene y espera
     }
@@ -763,7 +774,7 @@ export class BlackjackTableController {
     const insurancePending = Boolean(this.hand?.insurance?.offered && this.hand.insurance.taken === null);
     const activeTarget = this.currentActiveTarget();
     const activeHandObj = activeTarget ? this[activeTarget] : null;
-    const legal = (activeHandObj && !insurancePending)
+    const legal = (activeHandObj && !insurancePending && !this.actionsLocked)
       ? availableActions(activeHandObj, this.bankroll - this.currentActiveHandsCommitted())
       : [];
 
@@ -867,6 +878,7 @@ export class BlackjackTableController {
           </div>
           ${isMulti ? `<div class="cut-hint">Puesto ${this.playerPrimaryPosition} — la mesa sigue igual, solo cambia si juegas 1 o 2 puestos.</div>` : ''}
         `; })() : `
+          ${this.actionsLocked ? `<div class="cut-hint">Un momento, revisa tus cartas...</div>` : ''}
           <div class="action-row">
             <button class="action-btn double" data-action="double" ${legal.includes('double') ? '' : 'disabled'}><span class="icon">2x</span>DOBLAR</button>
             <button class="action-btn hit" data-action="hit" ${legal.includes('hit') ? '' : 'disabled'}><span class="icon">＋</span>PEDIR</button>
@@ -1104,9 +1116,14 @@ export class BlackjackTableController {
    * número si nadie se sentó ahí.
    */
   renderSixSeatGrid(activeTarget, results, results2, insuranceProfit) {
-    const order = [1, 6, 2, 5, 3, 4];
-    const slots = order.map(pos => this.renderOneTableSeat(pos, activeTarget, results, results2, insuranceProfit)).join('');
-    return `<div class="table-seats-grid">${slots}</div>`;
+    const rows = [[1, 6], [2, 5], [3, 4]];
+    const rowsHtml = rows.map(([left, right]) => `
+      <div class="table-seats-row">
+        ${this.renderOneTableSeat(left, activeTarget, results, results2, insuranceProfit)}
+        ${this.renderOneTableSeat(right, activeTarget, results, results2, insuranceProfit)}
+      </div>
+    `).join('');
+    return `<div class="table-seats-diamond">${rowsHtml}</div>`;
   }
 
   renderOneTableSeat(position, activeTarget, results, results2, insuranceProfit) {
