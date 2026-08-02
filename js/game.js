@@ -4,7 +4,7 @@
 // game-repository.js persiste lo que este módulo produce.
 // game-ui.js llama a estas funciones desde los botones.
 
-import { createShoe, dealCard, isPastCutCard, handValue, RANK_VALUE } from './deck.js';
+import { createShoe, shuffleForNewShoe, finalizeShoeCut, dealCard, isPastCutCard, handValue, RANK_VALUE } from './deck.js';
 import { basicStrategyAction, normalizeDealerUpcard, ACTIONS } from './strategy.js';
 import { buildDecisionAnalytics } from './analytics.js';
 import { computeExactEV } from './ev-engine.js';
@@ -26,6 +26,33 @@ export function startNewShoe(game) {
   game.shoeNumber += 1;
   game.handNumberInShoe = 0;
   return game.shoe;
+}
+
+/**
+ * PASO 1 del ritual de corte interactivo: baraja un zapato nuevo y lo
+ * deja "pendiente" (game.pendingShoeCards) sin cortar todavía —
+ * game.shoe NO se toca aún, así que el zapato anterior sigue disponible
+ * para guardarse en Supabase antes de reemplazarlo.
+ */
+export function beginShoeShuffle(game) {
+  game.pendingShoeCards = shuffleForNewShoe({ numDecks: game.numDecks, rng: game.rng });
+  return game.pendingShoeCards;
+}
+
+/**
+ * PASO 2 del ritual de corte interactivo: el jugador ya eligió dónde
+ * cortar (cutPosition, un índice de carta dentro del zapato barajado
+ * pendiente). Aplica el corte, quema la primera carta, y esta vez SÍ
+ * reemplaza game.shoe. Devuelve la carta quemada para mostrarla.
+ */
+export function confirmShoeCut(game, cutPosition) {
+  if (!game.pendingShoeCards) throw new Error('No hay un zapato barajado pendiente de cortar.');
+  const { shoe, burnedCard } = finalizeShoeCut(game.pendingShoeCards, cutPosition, game.rng);
+  game.shoe = shoe;
+  game.shoeNumber += 1;
+  game.handNumberInShoe = 0;
+  game.pendingShoeCards = null;
+  return burnedCard;
 }
 
 export function shoeNeedsReplacement(game) {

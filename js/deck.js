@@ -68,36 +68,65 @@ export function computeCutCardPosition(totalCards, rng = Math.random) {
 }
 
 /**
+ * PASO 1 del ritual de corte: construye y baraja un zapato nuevo, SIN
+ * cortarlo todavía. Devuelve las cartas ya barajadas para que el
+ * jugador elija dónde insertar la tarjeta de corte.
+ */
+export function shuffleForNewShoe({ numDecks = 6, rng = Math.random } = {}) {
+  const cards = shuffle(buildShoe(numDecks), rng);
+  return { cards, totalCards: cards.length, numDecks };
+}
+
+/**
+ * PASO 2 del ritual de corte: aplica el corte en la posición que eligió
+ * el jugador (0..totalCards, normalmente elegida como % del mazo),
+ * quema la primera carta tras el corte, y arma el objeto "shoe"
+ * completo listo para jugar — misma forma que devolvía createShoe().
+ * Devuelve también la carta quemada por separado, para mostrársela al
+ * jugador.
+ */
+export function finalizeShoeCut({ cards, totalCards }, cutPosition, rng = Math.random) {
+  const clampedCut = Math.min(Math.max(cutPosition, 1), totalCards - 1);
+  let cut = applyPlayerCut(cards, clampedCut);
+
+  const burnedCard = cut[0];
+  const drawPile = cut.slice(1);
+
+  const { cutCardPosition, penetrationPct } = computeCutCardPosition(totalCards, rng);
+
+  const shoe = {
+    totalCards,
+    playerCutPosition: clampedCut,
+    cutCardPosition,
+    penetrationPct,
+    drawPile,
+    dealtSequence: [burnedCard],
+    burnedCards: [burnedCard],
+    cursor: 0,
+  };
+
+  return { shoe, burnedCard };
+}
+
+/**
  * Crea un "Shoe" completo listo para jugar: construye, baraja, aplica
  * corte del jugador (posición aleatoria entre 15% y 85%), quema la
  * primera carta, y calcula la carta de corte final.
  *
  * Devuelve un objeto que además de las cartas trae todo lo necesario
  * para persistir en la tabla `shoes` de Supabase.
+ *
+ * NOTA: para el ritual de corte interactivo real (el jugador elige
+ * dónde cortar en pantalla), usar shuffleForNewShoe() + finalizeShoeCut()
+ * por separado. Esta función sigue existiendo para scripts de
+ * simulación y pruebas que no necesitan interacción — usa una posición
+ * de corte aleatoria, como antes.
  */
 export function createShoe({ numDecks = 6, rng = Math.random } = {}) {
-  let cards = shuffle(buildShoe(numDecks), rng);
-
-  const totalCards = cards.length;
-  const playerCutPosition = Math.floor(totalCards * (0.15 + rng() * 0.70));
-  cards = applyPlayerCut(cards, playerCutPosition);
-
-  // Se quema la primera carta tras el corte
-  const burned = [cards[0]];
-  const drawPile = cards.slice(1);
-
-  const { cutCardPosition, penetrationPct } = computeCutCardPosition(totalCards, rng);
-
-  return {
-    totalCards,
-    playerCutPosition,
-    cutCardPosition,
-    penetrationPct,
-    drawPile,        // cartas que quedan por repartir, en orden
-    dealtSequence: burned.slice(), // secuencia completa ya "consumida" (empieza con la quemada)
-    burnedCards: burned,
-    cursor: 0,        // índice de la próxima carta a repartir dentro de dealtSequence una vez avance
-  };
+  const shuffled = shuffleForNewShoe({ numDecks, rng });
+  const playerCutPosition = Math.floor(shuffled.totalCards * (0.15 + rng() * 0.70));
+  const { shoe } = finalizeShoeCut(shuffled, playerCutPosition, rng);
+  return shoe;
 }
 
 /**
