@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+  <meta name="theme-color" content="#030503">
+  <title>Preview local — Blackjack Trainer</title>
+  <link rel="stylesheet" href="./css/game.css?v=table-mark-11">
+</head>
+<body class="preview-mode">
+  <div class="table-screen" id="tableScreen">
+    <header class="casino-header">
+      <div class="casino-brand"><span class="brand-spade">♠</span><span><strong>BLACKJACK</strong><small>— TRAINER —</small></span></div>
+      <div class="player-hud">
+        <button id="buyChipsButton" class="chip-balance" type="button"><span class="chip-icon"><span class="chip-glyph">♛</span></span><span><strong id="hudBankroll">100</strong><small>FICHAS</small></span></button>
+        <div class="level-block"><span>NIVEL 1</span><small>0 / 100 XP</small><i><b></b></i></div>
+        <div class="avatar-wrap"><span class="avatar-placeholder"></span><i></i></div>
+        <button id="hudMenuButton" class="hud-menu-btn" type="button">☰</button>
+      </div>
+    </header>
+    <div class="hud-utility-menu" id="hudUtilityMenu" hidden>
+      <span class="player-name" id="playerNameLabel">Jugador Demo</span>
+      <button id="limitsButton" type="button">Límites</button><button id="reportsButton" type="button">Reportes</button><button id="exitButton" type="button">Salir</button>
+    </div>
+    <div class="stats-card" id="statsCard" hidden>
+      <section class="today-card"><h2>ESTADÍSTICAS DE HOY</h2><div><span>Manos jugadas</span><strong id="statSessionHands">0</strong></div><div><span>Precisión</span><strong class="green" id="statPrecision">—</strong></div><div><span>EV perdido</span><strong id="statEvLoss">0.00</strong></div><div><span>Tiempo promedio</span><strong id="statAvgTime">—</strong></div><span id="statPrecisionSub" hidden>0 / 0</span></section>
+      <section class="streak-card"><h2>RACHA ACTUAL</h2><div class="streak-main"><span>🔥</span><strong id="statStreak">0</strong></div><small>MEJOR RACHA</small><b id="statBestStreak">0</b></section>
+      <section class="last-session-card"><h2>ÚLTIMA SESIÓN</h2><div class="session-date">▣ <span>Hoy</span></div><div><span>Duración</span><strong id="statSessionTime">—</strong></div><div><span>Manos</span><strong id="statSessionHandsMirror">0</strong></div><div><span>Precisión</span><strong class="green" id="statPrecisionMirror">—</strong></div></section>
+    </div>
+    <div class="shoe-bar" id="shoeBar" hidden>
+      <div class="item"><div class="item-label">TRUE COUNT</div><div class="item-value positive-placeholder">+2</div></div><div class="item"><div class="item-label">RUNNING COUNT</div><div class="item-value positive-placeholder">+12</div></div><div class="item"><div class="item-label">CARTAS RESTANTES</div><div class="item-value" id="cardsRemainingLabel">0</div></div><div class="item"><div class="item-label">ZAPATOS RESTANTES</div><div class="item-value" id="decksRemainingLabel">0.0</div></div>
+      <span id="shoeNumberLabel" hidden>1</span><span id="pctPlayedLabel" hidden>0%</span><span id="cutPctLabel" hidden>0%</span><span id="handNumberLabel" hidden>0</span>
+    </div>
+    <div id="tableRoot" class="felt"><div class="start-screen"><h1>Cargando preview…</h1></div></div>
+  </div>
+  <nav class="bottom-nav" aria-label="Navegación principal">
+    <a class="bottom-nav-item active" href="./preview.html" aria-current="page">
+      <svg viewBox="0 0 32 28" aria-hidden="true"><rect x="5" y="5" width="14" height="19" rx="2" transform="rotate(-8 12 14)"/><rect x="14" y="3" width="13" height="20" rx="2" transform="rotate(7 20 13)"/><path d="M20 8l2.6 3.5L20 15l-2.6-3.5z"/></svg><span>ENTRENAR</span>
+    </a>
+    <a class="bottom-nav-item" href="./reports.html?preview=1&view=nav-3">
+      <svg viewBox="0 0 32 28" aria-hidden="true"><rect x="4" y="15" width="5" height="10" rx="1"/><rect x="13" y="8" width="5" height="17" rx="1"/><rect x="22" y="3" width="5" height="22" rx="1"/></svg><span>ESTADÍSTICAS</span>
+    </a>
+  </nav>
+  <script>
+    window.addEventListener('error', function (event) {
+      var root = document.getElementById('tableRoot');
+      if (root) root.innerHTML = '<div class="start-screen"><h1>No se pudo iniciar</h1><p>' + (event.message || 'Error desconocido') + '</p></div>';
+    });
+    window.addEventListener('unhandledrejection', function (event) {
+      var root = document.getElementById('tableRoot');
+      var message = event.reason && event.reason.message ? event.reason.message : String(event.reason || 'Error desconocido');
+      if (root) root.innerHTML = '<div class="start-screen"><h1>No se pudo iniciar</h1><p>' + message + '</p></div>';
+    });
+  </script>
+  <script type="module" src="./js/preview-bootstrap.js?v=table-mark-8"></script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'blackjack-trainer-v7-0';
+const CACHE_NAME = 'blackjack-trainer-v10';
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -31,6 +31,6 @@ self.addEventListener('fetch', event => {
         caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
         return response;
       })
-      .catch(() => caches.match(event.request).then(cached => cached || caches.match('/index.html')))
+      .catch(() => caches.match(event.request))
   );
 });

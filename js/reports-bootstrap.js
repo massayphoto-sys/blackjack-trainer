@@ -6,11 +6,55 @@
 
 import { getCurrentSession, subscribeToAuthChanges } from './auth.js';
 import { getMyProfile, getPlayerStats, getMyMistakes, getFatigueStreakData } from './game-repository.js';
+import { clearLegacyAppCache, isPreviewMode, previewStats, previewMistakes, previewFatigueRows } from './preview.js';
+
+const previewMode = isPreviewMode();
 
 const backButton = document.getElementById('backButton');
 const reportsBody = document.getElementById('reportsBody');
 const glossaryButton = document.getElementById('glossaryButton');
 const glossaryPanel = document.getElementById('glossaryPanel');
+const trainTabLink = document.getElementById('trainTabLink');
+const statsTabLink = document.getElementById('statsTabLink');
+
+if (trainTabLink) trainTabLink.href = previewMode ? './preview.html' : './game.html';
+if (statsTabLink) statsTabLink.href = previewMode ? './reports.html?preview=1&view=nav-3' : './reports.html?view=nav-3';
+
+function enableDragScroll(container) {
+  if (!container) return;
+  let dragging = false;
+  let startY = 0;
+  let startScrollTop = 0;
+
+  container.addEventListener('pointerdown', event => {
+    // Touch and pen use native momentum scrolling. Mouse users can hold and
+    // drag the report just like they would on a phone.
+    if (event.pointerType !== 'mouse' || event.button !== 0) return;
+    dragging = true;
+    startY = event.clientY;
+    startScrollTop = container.scrollTop;
+    container.classList.add('dragging');
+    container.setPointerCapture(event.pointerId);
+  });
+
+  container.addEventListener('pointermove', event => {
+    if (!dragging) return;
+    const distance = event.clientY - startY;
+    if (Math.abs(distance) > 3) event.preventDefault();
+    container.scrollTop = startScrollTop - distance;
+  });
+
+  const stopDragging = event => {
+    if (!dragging) return;
+    dragging = false;
+    container.classList.remove('dragging');
+    if (container.hasPointerCapture?.(event.pointerId)) container.releasePointerCapture(event.pointerId);
+  };
+  container.addEventListener('pointerup', stopDragging);
+  container.addEventListener('pointercancel', stopDragging);
+}
+
+enableDragScroll(reportsBody);
 
 const CATEGORY_LABELS = { hard: 'Manos duras', soft: 'Manos suaves', pair: 'Pares' };
 const ERROR_CATEGORY_MAP = { hard: 'hard_total', soft: 'soft_total', pair: 'pair_splitting' };
@@ -40,7 +84,7 @@ function aggregateByCategory(rows) {
 async function loadMistakesInto(panel, category) {
   panel.innerHTML = '<div class="mistake-item">Cargando…</div>';
   try {
-    const mistakes = await getMyMistakes({ errorCategory: ERROR_CATEGORY_MAP[category], limit: 10 });
+    const mistakes = previewMode ? previewMistakes : await getMyMistakes({ errorCategory: ERROR_CATEGORY_MAP[category], limit: 10 });
     if (mistakes.length === 0) {
       panel.innerHTML = '<div class="mistake-item">No hay errores registrados en esta categoría.</div>';
       return;
@@ -126,11 +170,12 @@ function renderBarCard(title, buckets) {
     <div class="section-title" style="margin-bottom:6px;">${title}</div>
     ${buckets.map(b => {
       const pct = b.total > 0 ? Math.round((b.correct / b.total) * 100) : null;
+      const barWidth = Math.min(100, Math.max(0, pct ?? 0));
       const cls = pct === null ? '' : pct >= 85 ? '' : pct >= 65 ? 'mid' : 'low';
       return `
         <div class="bar-row">
           <span class="bar-label">${b.label}</span>
-          <span class="bar-track"><span class="bar-fill ${cls}" style="width:${pct ?? 0}%"></span></span>
+          <span class="bar-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct ?? 0}"><span class="bar-fill ${cls}" style="width:${barWidth}%"></span></span>
           <span class="bar-pct">${pct === null ? '—' : pct + '%'}</span>
         </div>
         <div class="bar-n">${b.total} decisiones</div>
@@ -142,7 +187,7 @@ function renderBarCard(title, buckets) {
 
 async function loadFatigueStreakSection() {
   try {
-    const rows = await getFatigueStreakData();
+    const rows = previewMode ? previewFatigueRows : await getFatigueStreakData();
     const clean = rows
       .filter(r => r.hands && r.hands.hands_played_in_session_so_far !== null)
       .map(r => ({
@@ -177,7 +222,7 @@ async function loadFatigueStreakSection() {
 
 async function loadReport() {
   try {
-    const stats = await getPlayerStats();
+    const stats = previewMode ? previewStats : await getPlayerStats();
     if (!stats || stats.length === 0) {
       reportsBody.innerHTML = '<div class="empty-state">Todavía no tienes suficientes manos jugadas para generar un reporte. Sigue entrenando y vuelve aquí.</div>';
       return;
@@ -218,7 +263,7 @@ async function loadReport() {
 }
 
 if (backButton) {
-  backButton.addEventListener('click', () => { window.location.href = './game.html'; });
+  backButton.addEventListener('click', () => { window.location.href = previewMode ? './preview.html' : './game.html'; });
 }
 
 if (glossaryButton) {
@@ -240,6 +285,12 @@ async function guardSession(session) {
 }
 
 (async function init() {
+  if (previewMode) {
+    await clearLegacyAppCache();
+    document.body.classList.add('preview-mode');
+    await loadReport();
+    return;
+  }
   try {
     const session = await getCurrentSession();
     await guardSession(session);
