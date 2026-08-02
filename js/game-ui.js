@@ -1095,7 +1095,7 @@ export class BlackjackTableController {
     if (!entry || !entry.hand) {
       return `
         <div class="table-seat-slot empty">
-          <div class="table-seat-badge">${position}</div>
+          <span class="table-seat-num">${position}</span>
         </div>
       `;
     }
@@ -1140,10 +1140,8 @@ export class BlackjackTableController {
 
     return `
       <div class="table-seat-slot">
-        <div class="table-seat-label">${label}</div>
+        <div class="table-seat-label"><span class="table-seat-num">${position}</span> ${label}</div>
         <div class="hands-row">${handsHtml}</div>
-        <div class="table-seat-badge">${position}</div>
-        <div class="table-seat-chip"></div>
       </div>
     `;
   }
