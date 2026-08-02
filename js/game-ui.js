@@ -1118,19 +1118,19 @@ export class BlackjackTableController {
   renderSixSeatGrid(activeTarget, results, results2, insuranceProfit) {
     const rows = [[1, 6], [2, 5], [3, 4]];
     const rowsHtml = rows.map(([left, right]) => `
-      <div class="table-seats-row">
+      <div style="display:flex;flex-direction:row;justify-content:space-between;align-items:flex-start;gap:8px;width:100%;">
         ${this.renderOneTableSeat(left, activeTarget, results, results2, insuranceProfit)}
         ${this.renderOneTableSeat(right, activeTarget, results, results2, insuranceProfit)}
       </div>
     `).join('');
-    return `<div class="table-seats-diamond">${rowsHtml}</div>`;
+    return `<div style="display:flex;flex-direction:column;gap:10px;width:100%;padding:4px 8px 6px;">${rowsHtml}</div>`;
   }
 
   renderOneTableSeat(position, activeTarget, results, results2, insuranceProfit) {
     const entry = this.tableOrder.find(e => e.position === position);
     if (!entry || !entry.hand) {
       return `
-        <div class="table-seat-slot empty">
+        <div style="flex:1 1 0;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:40px;opacity:.35;min-width:0;">
           <span class="table-seat-num">${position}</span>
         </div>
       `;
@@ -1175,7 +1175,7 @@ export class BlackjackTableController {
     }).join('');
 
     return `
-      <div class="table-seat-slot">
+      <div style="flex:1 1 0;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;">
         <div class="table-seat-label"><span class="table-seat-num">${position}</span> ${label}</div>
         <div class="hands-row">${handsHtml}</div>
       </div>
