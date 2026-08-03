@@ -8,6 +8,7 @@ import { getCurrentSession, subscribeToAuthChanges, signOut } from './auth.js';
 import * as gameRepository from './game-repository.js';
 import { BlackjackTableController } from './game-ui.js?v=table-mark-8';
 import { clearLegacyAppCache, isPreviewMode, previewRepository } from './preview.js';
+import { openBuyChipsDialog, openLimitsDialog } from './hud-dialogs.js?v=2';
 
 const previewMode = isPreviewMode();
 
@@ -66,48 +67,14 @@ function handleUpdate(data) {
   document.getElementById('decksRemainingLabel').textContent = (data.cardsRemaining / 52).toFixed(1);
 }
 
-function openSheet(innerHtml, wireFn) {
-  const backdrop = document.createElement('div');
-  backdrop.className = 'sheet-backdrop';
-  backdrop.innerHTML = `<div class="sheet">${innerHtml}</div>`;
-  (tableScreen || document.body).appendChild(backdrop);
-  backdrop.querySelectorAll('[data-close]').forEach(btn => btn.addEventListener('click', () => backdrop.remove()));
-  wireFn(backdrop);
-}
-
 function openLimitsSheet() {
   if (!controller) return;
-  openSheet(`
-    <h3>Cambiar límites de mesa</h3>
-    <label>Apuesta mínima <input id="sheetMinBet" type="number" min="1" step="1" value="${controller.minimumBet}"></label>
-    <label>Apuesta máxima <input id="sheetMaxBet" type="number" min="1" step="1" value="${controller.maximumBet}"></label>
-    <div class="sheet-actions">
-      <button class="cancel" data-close type="button">Cancelar</button>
-      <button class="confirm" data-save-limits type="button">Guardar</button>
-    </div>
-  `, (backdrop) => {
-    backdrop.querySelector('[data-save-limits]').addEventListener('click', () => {
-      controller.setTableLimits(Number(document.getElementById('sheetMinBet').value), Number(document.getElementById('sheetMaxBet').value));
-      backdrop.remove();
-    });
-  });
+  openLimitsDialog(controller);
 }
 
 function openBuyChipsSheet() {
   if (!controller) return;
-  openSheet(`
-    <h3>Comprar fichas</h3>
-    <label>Monto <input id="sheetBuyAmount" type="number" min="1" step="10" value="100"></label>
-    <div class="sheet-actions">
-      <button class="cancel" data-close type="button">Cancelar</button>
-      <button class="confirm" data-buy-chips type="button">Comprar</button>
-    </div>
-  `, (backdrop) => {
-    backdrop.querySelector('[data-buy-chips]').addEventListener('click', () => {
-      controller.buyChips(Number(document.getElementById('sheetBuyAmount').value));
-      backdrop.remove();
-    });
-  });
+  openBuyChipsDialog(controller);
 }
 
 function makeController() {

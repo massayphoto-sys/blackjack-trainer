@@ -526,21 +526,52 @@ h1, h2, h3, h4, p, span, small, strong, b, em, label, button, input, a { font-fa
 }
 .util-row button:active { background: rgba(255,255,255,.08); color: var(--text); }
 
-/* --- Hoja modal (ajustes) --- */
-.sheet-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: flex-end; z-index: 20; }
-.sheet {
-  width: 100%; background: var(--panel-dark); border-top: 1px solid var(--line);
-  border-radius: 20px 20px 0 0; padding: 20px 18px calc(20px + env(safe-area-inset-bottom));
-  display: grid; gap: 12px;
+/* --- Diálogos del HUD --- */
+.hud-dialog-backdrop {
+  position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 18px;
+  background: rgba(0, 5, 3, .88); opacity: 0; transition: opacity .1s linear;
+  contain: layout paint; isolation: isolate;
 }
-.sheet h3 { margin: 0; font-size: 16px; }
-.sheet label { display: grid; gap: 6px; font-size: 12px; color: var(--muted); }
-.sheet input { padding: 12px 14px; background: #07100c; border: 1px solid var(--line); border-radius: 10px; color: var(--text); outline: none; }
-.sheet input:focus { border-color: var(--green-bright); }
-.sheet-actions { display: flex; gap: 8px; margin-top: 4px; }
-.sheet-actions button { flex: 1; padding: 12px; border-radius: 10px; border: 0; font-weight: 800; }
-.sheet-actions .confirm { background: var(--green-bright); color: #04110a; }
-.sheet-actions .cancel { background: transparent; border: 1px solid var(--line); color: var(--text); }
+.hud-dialog-backdrop.is-open { opacity: 1; }
+.hud-dialog-backdrop.is-closing { opacity: 0; }
+.hud-dialog {
+  position: relative; width: min(100%, 390px); padding: 26px 22px 22px; overflow: hidden;
+  border: 1px solid rgba(206, 160, 52, .42); border-radius: 22px;
+  background: linear-gradient(155deg, rgba(14, 28, 21, .99), rgba(3, 10, 7, .99) 68%);
+  box-shadow: 0 24px 70px rgba(0,0,0,.72), inset 0 1px rgba(255,255,255,.04);
+  color: var(--text); transform: translate3d(0, 10px, 0) scale(.985);
+  transition: transform .12s ease-out; backface-visibility: hidden;
+}
+.hud-dialog::before { content: ''; position: absolute; inset: 0 0 auto; height: 2px; background: linear-gradient(90deg, transparent, #d6a83f, transparent); }
+.hud-dialog-backdrop.is-open .hud-dialog { transform: translate3d(0, 0, 0) scale(1); }
+.hud-dialog-close { position: absolute; top: 12px; right: 13px; width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 50%; background: rgba(255,255,255,.025); color: var(--muted); font-size: 22px; line-height: 1; }
+.hud-dialog-icon { display: grid; place-items: center; width: 52px; height: 52px; margin: 0 auto 12px; border: 2px solid #b98b27; border-radius: 50%; background: radial-gradient(circle, #16452d, #07140e 70%); color: #f1c552; font-size: 24px; box-shadow: 0 0 0 5px rgba(185,139,39,.09); }
+.dialog-chip { display: grid; place-items: center; width: 36px; height: 36px; border: 3px dashed #dcaa39; border-radius: 50%; font-size: 17px; }
+.hud-dialog-heading { text-align: center; }
+.hud-dialog-heading h2 { margin: 0; color: #fff; font-size: 21px; letter-spacing: .01em; }
+.hud-dialog-heading p { margin: 7px auto 20px; max-width: 300px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.hud-dialog-body { display: grid; gap: 15px; }
+.hud-dialog-presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+.hud-dialog-presets button { min-height: 42px; border: 1px solid rgba(206,160,52,.28); border-radius: 10px; background: rgba(206,160,52,.055); color: #eac65f; font-weight: 900; font-size: 11px; }
+.hud-dialog-presets button:hover, .hud-dialog-presets button.is-selected { border-color: #d3a437; background: rgba(206,160,52,.16); color: #fff1b7; }
+.hud-dialog-limit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.hud-dialog-field { display: grid; gap: 7px; color: #aabeb4; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.hud-dialog-input-wrap { display: flex; align-items: center; min-height: 48px; padding: 0 13px; border: 1px solid var(--line); border-radius: 12px; background: rgba(0,0,0,.3); }
+.hud-dialog-input-wrap:focus-within { border-color: #d0a236; box-shadow: 0 0 0 3px rgba(208,162,54,.09); }
+.hud-dialog-input-wrap b { color: #d7aa42; font-size: 16px; }
+.hud-dialog-input-wrap input { width: 100%; min-width: 0; padding: 12px 8px; border: 0; outline: 0; background: transparent; color: #fff; font: 800 17px/1 var(--font-ui); }
+.hud-dialog-note { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px; background: rgba(79,208,122,.06); color: #91aa9d; font-size: 10px; line-height: 1.4; }
+.hud-dialog-note span { color: #d5a73c; }
+.hud-dialog-error { margin: 10px 0 0; color: #ff7777; font-size: 11px; text-align: center; }
+.hud-dialog-actions { display: grid; grid-template-columns: 1fr 1.35fr; gap: 9px; margin-top: 20px; }
+.hud-dialog-actions button { min-height: 46px; border-radius: 12px; font-weight: 900; font-size: 12px; letter-spacing: .035em; }
+.hud-dialog-cancel { border: 1px solid var(--line); background: transparent; color: var(--text); }
+.hud-dialog-confirm { border: 1px solid #d4a432; background: linear-gradient(180deg, #e0b548, #b88620); color: #071009; box-shadow: 0 7px 18px rgba(185,134,25,.2); }
+@media (max-width: 390px) {
+  .hud-dialog { padding-inline: 17px; }
+  .hud-dialog-presets { grid-template-columns: repeat(2, 1fr); }
+  .hud-dialog-limit-grid { grid-template-columns: 1fr; }
+}
 
 .start-screen { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px; text-align: center; }
 .start-screen h1 { margin: 0; font-size: 24px; letter-spacing: -.02em; }

@@ -1102,7 +1102,7 @@ export class BlackjackTableController {
         <h2>Elige tu lugar en la mesa</h2>
         <p>Toca el puesto donde quieres sentarte.</p>
         <div class="table-seat-map">
-          ${[1, 2, 3, 4, 5, 6].map(p => `
+          ${[6, 5, 4, 3, 2, 1].map(p => `
             <button class="table-seat-btn" data-choose-position="${p}" type="button">${p}</button>
           `).join('')}
         </div>
@@ -1232,7 +1232,8 @@ export class BlackjackTableController {
    * número si nadie se sentó ahí.
    */
   renderSixSeatGrid(activeTarget, results, results2, insuranceProfit) {
-    const rows = [[1, 6], [2, 5], [3, 4]];
+    // En una mesa vista desde el jugador, el puesto 1 comienza a la derecha.
+    const rows = [[6, 1], [5, 2], [4, 3]];
     const rowsHtml = rows.map(([left, right]) => `
       <div class="table-seats-row">
         ${this.renderOneTableSeat(left, activeTarget, results, results2, insuranceProfit)}

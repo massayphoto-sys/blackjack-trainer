@@ -1,5 +1,6 @@
 import { BlackjackTableController } from './game-ui.js?v=table-mark-8';
 import { clearLegacyAppCache, previewRepository } from './preview.js?v=multiplayer-1';
+import { openBuyChipsDialog, openLimitsDialog } from './hud-dialogs.js?v=2';
 
 const byId = id => document.getElementById(id);
 const tableRoot = byId('tableRoot');
@@ -37,15 +38,8 @@ const controller = new BlackjackTableController({
   repository: previewRepository,
 });
 
-byId('buyChipsButton').addEventListener('click', () => {
-  const amount = Number(prompt('¿Cuántas fichas quieres agregar?', '100'));
-  if (amount > 0) controller.buyChips(amount);
-});
-byId('limitsButton').addEventListener('click', () => {
-  const minimum = Number(prompt('Apuesta mínima', String(controller.minimumBet)));
-  const maximum = Number(prompt('Apuesta máxima', String(controller.maximumBet)));
-  controller.setTableLimits(minimum, maximum);
-});
+byId('buyChipsButton').addEventListener('click', () => openBuyChipsDialog(controller));
+byId('limitsButton').addEventListener('click', () => openLimitsDialog(controller));
 byId('reportsButton').addEventListener('click', () => { window.location.href = './reports.html?preview=1&view=nav-3'; });
 byId('exitButton').addEventListener('click', () => { window.location.href = './index.html'; });
 byId('hudMenuButton').addEventListener('click', () => { byId('hudUtilityMenu').hidden = !byId('hudUtilityMenu').hidden; });
