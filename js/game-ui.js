@@ -996,26 +996,14 @@ export class BlackjackTableController {
       const screen = this.root?.closest('.table-screen');
       if (!screen) return;
 
-      screen.style.zoom = '1';
-      screen.style.width = '100%';
-      screen.style.maxWidth = '480px';
-
-      if (window.innerWidth > 600) {
-        screen.style.setProperty('--table-scale', '1');
-        return;
-      }
-
-      const bottomNav = document.querySelector('.bottom-nav');
-      const bottomNavHeight = bottomNav?.getBoundingClientRect().height || 64;
-      const availableHeight = Math.max(window.innerHeight - bottomNavHeight, 320);
-      const hiddenFeltOverflow = Math.max(0, this.root.scrollHeight - this.root.clientHeight);
-      const requiredHeight = screen.scrollHeight + hiddenFeltOverflow;
-      const scale = Math.min(1, availableHeight / Math.max(requiredHeight, 1));
-
-      screen.style.setProperty('--table-scale', String(scale));
-      screen.style.zoom = String(scale);
-      screen.style.width = `${100 / scale}%`;
-      screen.style.maxWidth = `${480 / scale}px`;
+      // Keep the layout tied to the real viewport. The previous fitter widened
+      // the screen and depended on non-standard CSS `zoom` to shrink it back.
+      // Mobile browsers apply that combination inconsistently, which left a
+      // 480px+ table clipped inside a narrower phone viewport.
+      screen.style.removeProperty('zoom');
+      screen.style.removeProperty('width');
+      screen.style.removeProperty('max-width');
+      screen.style.removeProperty('--table-scale');
     });
   }
 

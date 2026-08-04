@@ -1,4 +1,4 @@
-import { BlackjackTableController } from './game-ui.js?v=table-mark-8';
+import { BlackjackTableController } from './game-ui.js?v=mobile-fit-4';
 import { clearLegacyAppCache, previewRepository } from './preview.js?v=multiplayer-1';
 import { openBuyChipsDialog, openLimitsDialog } from './hud-dialogs.js?v=2';
 
