@@ -255,7 +255,7 @@ h1, h2, h3, h4, p, span, small, strong, b, em, label, button, input, a { font-fa
   display: grid;
   grid-template-columns: repeat(4, 1fr);
 }
-.shoe-bar .item { text-align: center; border-left: 1px solid var(--line); }
+.shoe-bar .item { min-width: 0; text-align: center; border-left: 1px solid var(--line); }
 .shoe-bar .item:first-child { border-left: 0; }
 .shoe-bar .item-label { font-size: 8px; font-weight: 800; letter-spacing: .04em; color: var(--muted); text-transform: uppercase; margin-bottom: 3px; }
 .shoe-bar .item-value { font-family: var(--num); font-weight: 800; font-size: 15px; }
@@ -451,9 +451,9 @@ h1, h2, h3, h4, p, span, small, strong, b, em, label, button, input, a { font-fa
   background: rgba(201,72,72,.12); border: 1px solid rgba(201,72,72,.4); color: #ffb3b3;
   padding: 9px 12px; border-radius: 10px; font-size: 11px; margin-bottom: 8px; text-align: center;
 }
-.action-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; margin-bottom: 10px; }
+.action-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; margin-bottom: 10px; min-width: 0; }
 .action-btn {
-  min-height: 58px; padding: 10px 2px 9px; border: 1px solid rgba(255,255,255,.22); border-radius: 8px; color: #fff;
+  min-height: 58px; min-width: 0; padding: 10px 2px 9px; border: 1px solid rgba(255,255,255,.22); border-radius: 8px; color: #fff;
   display: flex; flex-direction: column; align-items: center; gap: 3px;
   font-weight: 800; font-size: 9.5px; letter-spacing: .01em; box-shadow: inset 0 1px rgba(255,255,255,.15), 0 5px 14px rgba(0,0,0,.28);
 }
@@ -515,7 +515,7 @@ h1, h2, h3, h4, p, span, small, strong, b, em, label, button, input, a { font-fa
 
 .quick-bets { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
 .quick-bets button {
-  padding: 9px 2px; border-radius: 10px; border: 1px solid rgba(79,208,122,.35);
+  min-width: 0; padding: 9px 2px; border-radius: 10px; border: 1px solid rgba(79,208,122,.35);
   background: transparent; color: var(--text); font-weight: 800; font-size: 11.5px;
 }
 .quick-bets button:disabled { opacity: .3; }
@@ -553,7 +553,7 @@ h1, h2, h3, h4, p, span, small, strong, b, em, label, button, input, a { font-fa
 .hud-dialog-heading p { margin: 7px auto 20px; max-width: 300px; color: var(--muted); font-size: 12px; line-height: 1.45; }
 .hud-dialog-body { display: grid; gap: 15px; }
 .hud-dialog-presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
-.hud-dialog-presets button { min-height: 42px; border: 1px solid rgba(206,160,52,.28); border-radius: 10px; background: rgba(206,160,52,.055); color: #eac65f; font-weight: 900; font-size: 11px; }
+.hud-dialog-presets button { min-width: 0; min-height: 42px; border: 1px solid rgba(206,160,52,.28); border-radius: 10px; background: rgba(206,160,52,.055); color: #eac65f; font-weight: 900; font-size: 11px; }
 .hud-dialog-presets button:hover, .hud-dialog-presets button.is-selected { border-color: #d3a437; background: rgba(206,160,52,.16); color: #fff1b7; }
 .hud-dialog-limit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .hud-dialog-field { display: grid; gap: 7px; color: #aabeb4; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
