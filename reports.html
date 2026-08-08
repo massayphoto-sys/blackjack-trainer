@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+  <meta name="description" content="Blackjack Trainer — reporte de precisión.">
+  <meta name="theme-color" content="#030503">
+  <title>Reportes — Blackjack Trainer</title>
+  <link rel="stylesheet" href="./css/game.css?v=reports-7">
+  <style>
+    html, body { width: 100%; height: 100%; overflow: hidden; }
+    .reports-screen { width: 100%; max-width: none; height: calc(100% - 64px); margin: 0; overflow: hidden; display: flex; flex-direction: column; background: #030503; }
+    .reports-topbar {
+      flex: 0 0 auto; display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: linear-gradient(180deg, #090b09, #020302);
+      border-bottom: 1px solid rgba(197,158,70,.18); position: relative; z-index: 5;
+    }
+    .reports-topbar h1 { font-size: 19px; margin: 0; flex: 1; letter-spacing: -.01em; }
+    .reports-topbar .icon-btn { width: 36px; height: 34px; display: grid; place-items: center; padding: 0; border: 1px solid rgba(197,158,70,.42); border-radius: 8px; background: #0b100c; color: #e7c466; font-size: 16px; }
+    .reports-topbar .icon-btn:hover { background: #121a14; transform: none; }
+    .reports-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; padding: 16px 14px 74px; display: grid; gap: 18px; touch-action: pan-y; -webkit-overflow-scrolling: touch; cursor: grab; user-select: none; }
+    .reports-body.dragging { cursor: grabbing; scroll-behavior: auto; }
+    .reports-body::-webkit-scrollbar { display: none; width: 0; height: 0; }
+
+    .overall-card {
+      background: var(--card-bg); border-radius: 18px; padding: 23px 18px; color: #22281f; text-align: center;
+    }
+    .overall-card .big { font-family: var(--num); font-weight: 900; font-size: 44px; color: var(--green); line-height: 1; }
+    .overall-card .sub { font-size: 14px; color: #626a60; margin-top: 10px; }
+    .overall-card .note { max-width: 390px; margin: 15px auto 0; font-size: 12.5px; color: #7d867a; line-height: 1.5; }
+
+    .category-card {
+      border: 1px solid rgba(90,130,102,.26); border-radius: 14px; padding: 18px; background: linear-gradient(145deg, rgba(10,18,13,.96), rgba(4,9,6,.98));
+    }
+    .category-card .cat-head { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+    .category-card .cat-name { font-weight: 800; font-size: 17px; }
+    .category-card .cat-meta { font-size: 13px; color: #aeb8b1; margin-top: 4px; }
+    .category-card .cat-pct { font-family: var(--num); font-weight: 900; font-size: 25px; }
+    .category-card .cat-pct.low { color: var(--danger); }
+    .category-card .cat-pct.mid { color: var(--warning); }
+    .category-card .cat-pct.high { color: var(--green-bright); }
+    .cat-detail { margin-top: 12px; display: none; }
+    .cat-detail.open { display: block; }
+    .breakdown-row {
+      display: grid; grid-template-columns: 50px 1fr auto auto; gap: 8px; align-items: center;
+      padding: 10px 0; border-top: 1px solid var(--line-soft); font-size: 13px; cursor: pointer;
+    }
+    .breakdown-row:first-child { border-top: 0; }
+    .breakdown-row .vs { color: var(--muted); font-family: var(--num); }
+    .breakdown-row .exp { color: var(--muted); }
+    .breakdown-row .pct { font-family: var(--num); font-weight: 800; text-align: right; }
+    .breakdown-row .conf { font-size: 9px; padding: 2px 6px; border-radius: 999px; border: 1px solid var(--line-soft); color: var(--muted); }
+    .confidence-alta { color: var(--green-bright); border-color: rgba(79,208,122,.4); }
+    .confidence-media { color: var(--warning); border-color: rgba(243,201,105,.4); }
+    .confidence-baja { color: var(--muted); }
+
+    .mistakes-panel { margin-top: 10px; padding: 10px; border-radius: 10px; background: rgba(0,0,0,.25); display: none; }
+    .mistakes-panel.open { display: block; }
+    .mistake-item { font-size: 11.5px; padding: 6px 0; border-top: 1px solid var(--line-soft); }
+    .mistake-item:first-child { border-top: 0; }
+    .mistake-item .m-action { color: var(--danger); font-weight: 700; }
+    .mistake-item .m-expected { color: var(--green-bright); font-weight: 700; }
+
+    .empty-state { text-align: center; color: var(--muted); font-size: 13px; padding: 30px 20px; }
+
+    .section-title { font-size: 15px; font-weight: 800; color: #aeb8b1; text-transform: uppercase; letter-spacing: .05em; margin: 2px 0 8px; line-height: 1.35; }
+    .bar-card { border: 1px solid rgba(90,130,102,.26); border-radius: 14px; padding: 18px; background: linear-gradient(145deg, rgba(10,18,13,.96), rgba(4,9,6,.98)); }
+    .bar-row { display: grid; grid-template-columns: 108px 1fr 42px; align-items: center; gap: 10px; padding: 9px 0 3px; font-size: 13px; }
+    .bar-row .bar-label { color: var(--muted); }
+    .bar-row .bar-track { height: 10px; border-radius: 6px; background: rgba(255,255,255,.065); overflow: hidden; }
+    .bar-row .bar-fill { display: block; height: 100%; min-width: 0; max-width: 100%; border-radius: 6px; background: var(--green-bright); transition: width .35s ease; }
+    .bar-row .bar-fill.low { background: var(--danger); }
+    .bar-row .bar-fill.mid { background: var(--warning); }
+    .bar-row .bar-pct { font-family: var(--num); font-weight: 800; text-align: right; }
+    .bar-n { padding-left: 118px; margin-bottom: 5px; font-size: 12px; color: #dce3de; text-align: left; }
+
+    .glossary-panel {
+      margin: 0 14px; padding: 12px 14px; background: rgba(255,255,255,.04);
+      border: 1px solid var(--line-soft); border-radius: 12px; font-size: 12px; color: #dce2de; line-height: 1.5;
+    }
+    .glossary-panel p { margin: 0 0 8px; }
+    .glossary-panel p:last-child { margin-bottom: 0; }
+    .glossary-panel strong { color: var(--text); }
+
+    @media (max-width: 600px) {
+      .reports-screen { width: 100%; max-width: none; }
+      .reports-topbar { padding: 10px 12px; }
+      .reports-body { padding: 14px 12px 76px; gap: 16px; }
+      .overall-card { padding: 21px 14px; }
+      .category-card, .bar-card { border-radius: 12px; padding: 16px; }
+      .bar-row { grid-template-columns: 98px 1fr 40px; }
+      .bar-n { padding-left: 108px; }
+      .glossary-panel { margin: 0 10px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app-viewport" id="appViewport">
+  <div class="reports-screen">
+    <div class="reports-topbar">
+      <button id="backButton" class="icon-btn" type="button" aria-label="Volver a la mesa">←</button>
+      <h1>Tu precisión</h1>
+      <button id="glossaryButton" class="icon-btn" type="button" aria-label="¿Qué es esto?">ⓘ</button>
+    </div>
+    <div class="glossary-panel" id="glossaryPanel" hidden>
+      <p><strong>Manos duras:</strong> no tienen As, o el As solo puede valer 1. Son la mayoría de las manos (ej. 10-6 = 16).</p>
+      <p><strong>Manos suaves:</strong> tienen un As que vale 11 sin pasarte de 21 (ej. As-6 = 17 suave). Nunca te quemas al pedir, porque el As baja a valer 1 si hace falta.</p>
+      <p><strong>Pares:</strong> tus dos cartas valen lo mismo (ej. 8-8) — es la única situación donde puedes dividir la mano.</p>
+      <p><strong>"vs [carta]":</strong> es la carta que muestra la casa (el dealer) en esa mano — no la tuya.</p>
+    </div>
+    <div class="reports-body" id="reportsBody">
+      <div class="empty-state">Cargando…</div>
+    </div>
+  </div>
+
+  <nav class="bottom-nav" aria-label="Navegación principal">
+    <a id="trainTabLink" class="bottom-nav-item" href="./game.html">
+      <svg viewBox="0 0 32 28" aria-hidden="true"><rect x="5" y="5" width="14" height="19" rx="2" transform="rotate(-8 12 14)"/><rect x="14" y="3" width="13" height="20" rx="2" transform="rotate(7 20 13)"/><path d="M20 8l2.6 3.5L20 15l-2.6-3.5z"/></svg><span>ENTRENAR</span>
+    </a>
+    <a id="statsTabLink" class="bottom-nav-item active" href="./reports.html" aria-current="page">
+      <svg viewBox="0 0 32 28" aria-hidden="true"><rect x="4" y="15" width="5" height="10" rx="1"/><rect x="13" y="8" width="5" height="17" rx="1"/><rect x="22" y="3" width="5" height="22" rx="1"/></svg><span>ESTADÍSTICAS</span>
+    </a>
+  </nav>
+  </main>
+
+  <script src="./js/app-viewport.js?v=5"></script>
+  <script type="module" src="./js/reports-bootstrap.js?v=reports-4"></script>
+</body>
+</html>

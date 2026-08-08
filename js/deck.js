@@ -1,0 +1,173 @@
+// deck.js — Construcción, barajado y manejo del zapato (shoe).
+// Responsabilidad única: producir una secuencia de cartas y llevar el
+// registro exacto de qué ha salido, para que analytics.js pueda calcular
+// la composición restante real en cualquier punto.
+
+export const RANKS = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+export const SUITS = ['♠','♥','♦','♣'];
+
+// Valor de blackjack por rango (10/J/Q/K valen 10)
+export const RANK_VALUE = {
+  '2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,
+  '10':10,'J':10,'Q':10,'K':10,'A':11
+};
+
+/**
+ * Construye un zapato de N barajas completas (por defecto 6 = 312 cartas).
+ * Cada carta es { rank, suit, id } — id es único dentro del zapato, útil
+ * para depuración y para que full_card_sequence sea trazable.
+ */
+export function buildShoe(numDecks = 6) {
+  const cards = [];
+  let id = 0;
+  for (let d = 0; d < numDecks; d++) {
+    for (const suit of SUITS) {
+      for (const rank of RANKS) {
+        cards.push({ id: id++, rank, suit });
+      }
+    }
+  }
+  return cards;
+}
+
+/**
+ * Fisher-Yates shuffle. Uniformemente aleatorio — nunca sesgado por
+ * resultados previos. Ver nota de diseño: el barajado de un zapato nuevo
+ * es independiente de todo lo que pasó en zapatos anteriores.
+ */
+export function shuffle(cards, rng = Math.random) {
+  const arr = cards.slice();
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+/**
+ * Aplica el corte del jugador: mueve el bloque delantero (0..cutPosition)
+ * al final del mazo. No baraja, solo reordena.
+ */
+export function applyPlayerCut(cards, cutPosition) {
+  const front = cards.slice(0, cutPosition);
+  const back = cards.slice(cutPosition);
+  return back.concat(front);
+}
+
+/**
+ * Calcula dónde queda la carta de corte (penetración), con variación
+ * aleatoria entre 17.0% y 23.0% sin jugar, redondeada a una décima —
+ * tal como está documentado en las versiones anteriores del proyecto.
+ */
+export function computeCutCardPosition(totalCards, rng = Math.random) {
+  const minUnplayed = 0.17;
+  const maxUnplayed = 0.23;
+  const unplayedPct = Math.round((minUnplayed + rng() * (maxUnplayed - minUnplayed)) * 1000) / 1000;
+  const cutCardPosition = Math.floor(totalCards * (1 - unplayedPct));
+  return { cutCardPosition, penetrationPct: Math.round((1 - unplayedPct) * 1000) / 10 };
+}
+
+/**
+ * PASO 1 del ritual de corte: construye y baraja un zapato nuevo, SIN
+ * cortarlo todavía. Devuelve las cartas ya barajadas para que el
+ * jugador elija dónde insertar la tarjeta de corte.
+ */
+export function shuffleForNewShoe({ numDecks = 6, rng = Math.random } = {}) {
+  const cards = shuffle(buildShoe(numDecks), rng);
+  return { cards, totalCards: cards.length, numDecks };
+}
+
+/**
+ * PASO 2 del ritual de corte: aplica el corte en la posición que eligió
+ * el jugador (0..totalCards, normalmente elegida como % del mazo),
+ * quema la primera carta tras el corte, y arma el objeto "shoe"
+ * completo listo para jugar — misma forma que devolvía createShoe().
+ * Devuelve también la carta quemada por separado, para mostrársela al
+ * jugador.
+ */
+export function finalizeShoeCut({ cards, totalCards }, cutPosition, rng = Math.random) {
+  const clampedCut = Math.min(Math.max(cutPosition, 1), totalCards - 1);
+  let cut = applyPlayerCut(cards, clampedCut);
+
+  const burnedCard = cut[0];
+  const drawPile = cut.slice(1);
+
+  const { cutCardPosition, penetrationPct } = computeCutCardPosition(totalCards, rng);
+
+  const shoe = {
+    totalCards,
+    playerCutPosition: clampedCut,
+    cutCardPosition,
+    penetrationPct,
+    drawPile,
+    dealtSequence: [burnedCard],
+    burnedCards: [burnedCard],
+    cursor: 0,
+  };
+
+  return { shoe, burnedCard };
+}
+
+/**
+ * Crea un "Shoe" completo listo para jugar: construye, baraja, aplica
+ * corte del jugador (posición aleatoria entre 15% y 85%), quema la
+ * primera carta, y calcula la carta de corte final.
+ *
+ * Devuelve un objeto que además de las cartas trae todo lo necesario
+ * para persistir en la tabla `shoes` de Supabase.
+ *
+ * NOTA: para el ritual de corte interactivo real (el jugador elige
+ * dónde cortar en pantalla), usar shuffleForNewShoe() + finalizeShoeCut()
+ * por separado. Esta función sigue existiendo para scripts de
+ * simulación y pruebas que no necesitan interacción — usa una posición
+ * de corte aleatoria, como antes.
+ */
+export function createShoe({ numDecks = 6, rng = Math.random } = {}) {
+  const shuffled = shuffleForNewShoe({ numDecks, rng });
+  const playerCutPosition = Math.floor(shuffled.totalCards * (0.15 + rng() * 0.70));
+  const { shoe } = finalizeShoeCut(shuffled, playerCutPosition, rng);
+  return shoe;
+}
+
+/**
+ * Reparte una carta del shoe. Muta el shoe (drawPile/dealtSequence) y
+ * devuelve la carta repartida. Si no quedan cartas, lanza error —
+ * en la práctica no debería pasar porque el corte deja margen.
+ */
+export function dealCard(shoe) {
+  if (shoe.drawPile.length === 0) {
+    throw new Error('El zapato se quedó sin cartas — revisa la lógica de corte.');
+  }
+  const card = shoe.drawPile.shift();
+  shoe.dealtSequence.push(card);
+  return card;
+}
+
+/**
+ * ¿Ya se llegó a la carta de corte? Se compara la cantidad de cartas
+ * ya repartidas (dealtSequence.length) contra cutCardPosition.
+ */
+export function isPastCutCard(shoe) {
+  return shoe.dealtSequence.length >= shoe.cutCardPosition;
+}
+
+/** Suma el valor de una mano de blackjack, ajustando ases (11 -> 1) si se pasa de 21. */
+export function handValue(cards) {
+  let total = cards.reduce((sum, c) => sum + RANK_VALUE[c.rank], 0);
+  const aces = cards.filter(c => c.rank === 'A').length;
+  let acesReduced = 0;
+  while (total > 21 && acesReduced < aces) {
+    total -= 10;
+    acesReduced++;
+  }
+  // Suave = todavía queda al menos un As contando como 11 (no basta con
+  // que "hubo alguna reducción" — si el único As se redujo a 1, la mano
+  // ya es dura, aunque el total haya cambiado respecto a la suma cruda).
+  const isSoft = aces > acesReduced;
+  return { total, isSoft, isBlackjack: cards.length === 2 && total === 21 };
+}
+
+/** Serializa el shoe a lo que espera la columna shoes.full_card_sequence. */
+export function serializeShoeForStorage(shoe) {
+  return shoe.dealtSequence.map(c => `${c.rank}${c.suit}`);
+}
