@@ -5,9 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <meta name="theme-color" content="#030503">
   <title>Preview local — Blackjack Trainer</title>
-  <link rel="stylesheet" href="./css/game.css?v=mobile-fit-4">
+  <link rel="stylesheet" href="./css/game.css?v=table-motion-28">
 </head>
 <body class="preview-mode">
+  <main class="app-viewport" id="appViewport">
   <div class="table-screen" id="tableScreen">
     <header class="casino-header">
       <div class="casino-brand"><span class="brand-spade">♠</span><span><strong>BLACKJACK</strong><small>— TRAINER —</small></span></div>
@@ -20,7 +21,7 @@
     </header>
     <div class="hud-utility-menu" id="hudUtilityMenu" hidden>
       <span class="player-name" id="playerNameLabel">Jugador Demo</span>
-      <button id="limitsButton" type="button">Límites</button><button id="reportsButton" type="button">Reportes</button><button id="exitButton" type="button">Salir</button>
+      <button id="limitsButton" type="button">Límites</button><button id="shoeTestButton" class="preview-test-btn" type="button">🧪 Final del zapato</button><button id="reportsButton" type="button">Reportes</button><button id="exitButton" type="button">Salir</button>
     </div>
     <div class="stats-card" id="statsCard" hidden>
       <section class="today-card"><h2>ESTADÍSTICAS DE HOY</h2><div><span>Manos jugadas</span><strong id="statSessionHands">0</strong></div><div><span>Precisión</span><strong class="green" id="statPrecision">—</strong></div><div><span>EV perdido</span><strong id="statEvLoss">0.00</strong></div><div><span>Tiempo promedio</span><strong id="statAvgTime">—</strong></div><span id="statPrecisionSub" hidden>0 / 0</span></section>
@@ -41,6 +42,7 @@
       <svg viewBox="0 0 32 28" aria-hidden="true"><rect x="4" y="15" width="5" height="10" rx="1"/><rect x="13" y="8" width="5" height="17" rx="1"/><rect x="22" y="3" width="5" height="22" rx="1"/></svg><span>ESTADÍSTICAS</span>
     </a>
   </nav>
+  </main>
   <script>
     window.addEventListener('error', function (event) {
       var root = document.getElementById('tableRoot');
@@ -52,6 +54,7 @@
       if (root) root.innerHTML = '<div class="start-screen"><h1>No se pudo iniciar</h1><p>' + message + '</p></div>';
     });
   </script>
-  <script type="module" src="./js/preview-bootstrap.js?v=mobile-fit-4"></script>
+  <script src="./js/app-viewport.js?v=5"></script>
+  <script type="module" src="./js/preview-bootstrap.js?v=table-motion-25"></script>
 </body>
 </html>

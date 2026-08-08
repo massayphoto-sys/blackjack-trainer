@@ -33,7 +33,7 @@ function openHudDialog({ icon, title, subtitle, body, confirmLabel, onConfirm })
     if (onConfirm(backdrop, showError) !== false) close();
   });
   document.addEventListener('keydown', onKeydown);
-  document.body.appendChild(backdrop);
+  (document.querySelector('.app-viewport') || document.body).appendChild(backdrop);
   requestAnimationFrame(() => backdrop.classList.add('is-open'));
   backdrop.querySelector('input')?.focus();
   return backdrop;
@@ -90,5 +90,39 @@ export function openLimitsDialog(controller) {
       controller.setTableLimits(Math.floor(minimum), Math.floor(maximum));
       return true;
     },
+  });
+}
+
+export function openShoeTestDialog(controller) {
+  const dialog = openHudDialog({
+    icon: '🧪',
+    title: 'Final del zapato',
+    subtitle: 'Control temporal del preview. Elige cuántas cartas faltan para llegar a la carta roja de corte.',
+    body: `
+      <div class="hud-dialog-presets" aria-label="Distancias rápidas">
+        ${[[0, 'Siguiente'], [1, '1 carta'], [2, '2 cartas'], [5, '5 cartas']]
+          .map(([amount, label]) => `<button type="button" data-shoe-test-amount="${amount}">${label}</button>`).join('')}
+      </div>
+      <label class="hud-dialog-field"><span>Cartas hasta el corte</span><span class="hud-dialog-input-wrap"><b>🂠</b><input data-shoe-test-input type="number" min="0" step="1" inputmode="numeric" value="5"></span></label>
+      <div class="hud-dialog-note"><span>⚠</span> Solo cambia el punto de corte en esta sesión local; no guarda datos.</div>`,
+    confirmLabel: 'Aplicar prueba',
+    onConfirm: (root, showError) => {
+      const amount = Number(root.querySelector('[data-shoe-test-input]').value);
+      if (!Number.isInteger(amount) || amount < 0) {
+        showError('Escribe cero o un número entero positivo.');
+        return false;
+      }
+      if (!controller.setCardsUntilCutForTesting(amount)) {
+        showError('Primero corta el zapato para iniciar la prueba.');
+        return false;
+      }
+      return true;
+    },
+  });
+  dialog.querySelectorAll('[data-shoe-test-amount]').forEach(button => {
+    button.addEventListener('click', () => {
+      dialog.querySelector('[data-shoe-test-input]').value = button.dataset.shoeTestAmount;
+      dialog.querySelectorAll('[data-shoe-test-amount]').forEach(item => item.classList.toggle('is-selected', item === button));
+    });
   });
 }

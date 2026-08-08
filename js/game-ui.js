@@ -99,6 +99,8 @@ export class BlackjackTableController {
     this.betEditorOpen = false;
     this.performancePanelOpen = false;
     this.viewportFitFrame = null;
+    this.cardsInMotion = false;
+    this.discardBacks = [];
   }
 
   async startSession() {
@@ -151,6 +153,7 @@ export class BlackjackTableController {
       });
     }
     beginShoeShuffle(this.game);
+    this.discardBacks = [];
     this.awaitingCut = true;
     this.burnedCardPreview = null;
     this.cutCardLandedOn = null; // se vuelve a detectar para este zapato nuevo, cuando corresponda
@@ -168,22 +171,37 @@ export class BlackjackTableController {
     }
 
     this.render();
+    await this.animateShoeToCutStage();
   }
 
   /** El jugador tocó un punto del mazo (0 a 1) para insertar la tarjeta roja. */
   async confirmCut(pct) {
-    if (!this.game.pendingShoeCards) return;
+    if (!this.game.pendingShoeCards || this.cutSequenceRunning) return;
+    this.cutSequenceRunning = true;
     const clamped = Math.min(Math.max(pct, 0.05), 0.95); // no dejar cortar en el borde extremo
     const cutPosition = Math.floor(this.game.pendingShoeCards.totalCards * clamped);
-    const burned = confirmShoeCut(this.game, cutPosition);
-    this.burnedCardPreview = burned;
-    this.pendingCutPct = null;
-    this.currentShoeRow = await this.repository.saveShoe({ sessionId: this.session.id, shoeNumber: this.game.shoeNumber, shoe: this.game.shoe });
-    this.render();
+    try {
+      const burned = confirmShoeCut(this.game, cutPosition);
+      this.burnedCardPreview = burned;
+      this.pendingCutPct = null;
+
+      // La animación representa exactamente las dos operaciones del motor:
+      // primero el corte elegido por el jugador y luego la tarjeta roja en
+      // la penetración aleatoria calculada para este zapato.
+      await this.animateCutSequence(clamped, this.game.shoe.cutCardPosition);
+      this.currentShoeRow = await this.repository.saveShoe({ sessionId: this.session.id, shoeNumber: this.game.shoeNumber, shoe: this.game.shoe });
+      this.root.classList.remove('cut-shoe-empty', 'cut-sequence-running');
+      this.render();
+      await this.animateCardFromShoe('.cut-burned-card .card');
+    } finally {
+      this.cutSequenceRunning = false;
+    }
   }
 
   /** El jugador ya vio la carta quemada — arranca el reparto normal del zapato nuevo. */
   async continueAfterCut() {
+    await this.animateCardsToDiscard();
+    await sleep(100);
     this.awaitingCut = false;
     this.burnedCardPreview = null;
     await this.dealNewHand();
@@ -200,10 +218,9 @@ export class BlackjackTableController {
     while (this.tableOrderIndex < this.tableOrder.length) {
       const entry = this.tableOrder[this.tableOrderIndex];
       if (entry.type === 'bot') {
-        this.playBotHandFully(entry.hand, entry.precision);
+        await this.playBotHandFully(entry, entry.precision);
         this.tableOrderIndex++;
-        this.render(); // se ve jugar a cada bot uno por uno, no todos de golpe
-        await sleep(450);
+        await sleep(350 + Math.random() * 250);
         continue;
       }
       if (allPlayerHandsResolved(entry.hand)) {
@@ -220,18 +237,31 @@ export class BlackjackTableController {
     await this.finishMultiTableHand();
   }
 
-  /** Juega un puesto de bot de principio a fin, sin pausas — estrategia básica correcta, sin conteo. */
-  playBotHandFully(hand, precision = 1) {
+  /** Juega un puesto de bot carta por carta, con una pausa humana entre decisiones. */
+  async playBotHandFully(entry, precision = 1) {
+    const hand = entry?.hand;
     if (!hand || hand.naturalBlackjackResolved) return;
     if (hand.insurance?.offered) resolveInsurance(hand, false, 0); // los bots nunca cuentan cartas, siempre rechazan el seguro
+    this.render(); // muestra inmediatamente quién está pensando antes de su pausa
     let guard = 0;
     while (!allPlayerHandsResolved(hand) && guard < 20) {
       const active = hand.playerHands[hand.activeHandIndex];
       if (!active || active.status !== 'active') break;
       const legal = availableActions(hand, 1000000);
       if (!legal.length) break;
+      await sleep(550 + Math.random() * 500);
+      const activeIndex = hand.activeHandIndex;
+      const previousLength = active.cards.length;
       const action = botDecideAction(active.cards, hand.dealerUpcard, legal, precision);
       applyPlayerAction(this.game, hand, action);
+      this.render();
+      if (action === 'split') {
+        await this.animateCardFromShoe(`[data-position="${entry.position}"] [data-hand-index="0"] .card:last-child`);
+        await sleep(70);
+        await this.animateCardFromShoe(`[data-position="${entry.position}"] [data-hand-index="1"] .card:last-child`);
+      } else if (active.cards.length > previousLength) {
+        await this.animateCardFromShoe(`[data-position="${entry.position}"] [data-hand-index="${activeIndex}"] .card:last-child`);
+      }
       guard++;
     }
   }
@@ -255,9 +285,6 @@ export class BlackjackTableController {
 
       if (!this.cutCardLandedOn) this.cutCardLandedOn = this.detectCutCardLanding();
 
-      // El puesto temporal (si se jugó un segundo esta mano) no queda fijo — se decide de nuevo la próxima mano.
-      this.tableOrder = this.tableOrder.filter(e => !e.temporary);
-
       // Los bots que se quedaron sin fichas suficientes para la mínima se retiran — su puesto queda vacante.
       const leaving = this.tableOrder.filter(e => e.type === 'bot' && e.bankroll < this.minimumBet);
       if (leaving.length) {
@@ -270,6 +297,7 @@ export class BlackjackTableController {
       this.bestStreak = Math.max(this.bestStreak, this.game.currentStreak);
       await this.repository.updateSessionTotals(this.session.id, this.sessionTotals);
       this.render();
+      await this.animateDealerReveal();
     } catch (error) {
       console.error('finishMultiTableHand error:', error);
       this.lastError = error?.message || String(error);
@@ -438,6 +466,13 @@ export class BlackjackTableController {
 
   async dealNewHand() {
     try {
+      // Las cartas resueltas permanecen sobre el fieltro para poder ver el
+      // resultado. Se recogen únicamente cuando ya va a comenzar el reparto
+      // siguiente.
+      if (this.lastHandResults) {
+        await this.animateCardsToDiscard();
+        await sleep(110);
+      }
       this.lastError = null;
       this.lastHandResults = null;
       this.lastHandResults2 = null;
@@ -448,6 +483,9 @@ export class BlackjackTableController {
       }
 
       if (this.tableMode === 'multi' && this.tableOrder.length > 0) {
+        // El segundo puesto anterior permanece visible durante el resultado y
+        // se retira recién al comenzar la próxima mano.
+        this.tableOrder = this.tableOrder.filter(entry => !entry.temporary);
         this.hand2 = null; // se vuelve a asignar más abajo solo si se juega un segundo puesto esta mano
         this.tryFillVacantSeat(); // antes de repartir: puede que un bot nuevo entre en un puesto que quedó vacío
 
@@ -491,7 +529,10 @@ export class BlackjackTableController {
           }
         });
         this.tableOrderIndex = 0;
+        this.actionsLocked = true;
         this.render();
+        await this.animateInitialDeal();
+        this.actionsLocked = false;
         await this.advanceTableTurn();
         return;
       }
@@ -514,11 +555,19 @@ export class BlackjackTableController {
         // puesto queda para una siguiente iteración).
         if (this.hand.insurance.offered) resolveInsurance(this.hand, false, 0);
         if (this.hand2.insurance.offered) resolveInsurance(this.hand2, false, 0);
+        this.actionsLocked = true;
+        this.render();
+        await this.animateInitialDeal();
+        this.actionsLocked = false;
         this.render();
         if (this.bothSeatsResolved()) await this.finishHand();
       } else {
         this.hand = dealInitialRound(this.game, { betAmount: this.currentBet, bankrollBeforeHand: this.bankroll, previousBetAmount: previousBet });
         this.hand2 = null;
+        this.actionsLocked = true;
+        this.render();
+        await this.animateInitialDeal();
+        this.actionsLocked = false;
         this.render();
         if (this.hand.naturalBlackjackResolved) {
           await this.finishHand();
@@ -589,7 +638,19 @@ export class BlackjackTableController {
       }
 
       this.markDecisionTime();
+      const activeIndex = hand.activeHandIndex;
+      const previousLength = hand.playerHands[activeIndex]?.cards.length ?? 0;
       applyPlayerAction(this.game, hand, action);
+      this.actionsLocked = true;
+      this.render();
+      if (action === 'split') {
+        await this.animateCardFromShoe(`[data-player-slot="${target}"][data-hand-index="0"] .card:last-child`);
+        await sleep(70);
+        await this.animateCardFromShoe(`[data-player-slot="${target}"][data-hand-index="1"] .card:last-child`);
+      } else if ((hand.playerHands[activeIndex]?.cards.length ?? 0) > previousLength) {
+        await this.animateCardFromShoe(`[data-player-slot="${target}"][data-hand-index="${activeIndex}"] .card:last-child`);
+      }
+      this.actionsLocked = false;
       this.render();
 
       if (this.tableMode === 'multi' && this.tableOrder.length > 0) {
@@ -690,6 +751,7 @@ export class BlackjackTableController {
       if (!this.cutCardLandedOn) this.cutCardLandedOn = this.detectCutCardLanding();
       await this.repository.updateSessionTotals(this.session.id, this.sessionTotals);
       this.render();
+      await this.animateDealerReveal();
     } catch (error) {
       console.error('finishHand error:', error);
       this.lastError = error?.message || String(error);
@@ -722,6 +784,18 @@ export class BlackjackTableController {
     } else {
       this.render();
     }
+  }
+
+  /** Herramienta exclusiva del preview local: acerca la carta de corte sin alterar el orden del mazo. */
+  setCardsUntilCutForTesting(count) {
+    const shoe = this.game.shoe;
+    if (!shoe) return false;
+    const cardsUntilCut = Math.max(0, Math.floor(Number(count)));
+    shoe.cutCardPosition = Math.min(shoe.totalCards, shoe.dealtSequence.length + cardsUntilCut);
+    shoe.penetrationPct = Math.round((shoe.cutCardPosition / shoe.totalCards) * 1000) / 10;
+    this.cutCardLandedOn = null;
+    this.render();
+    return true;
   }
 
   adjustBet(delta) {
@@ -770,6 +844,44 @@ export class BlackjackTableController {
     return Math.round((avgMs / 1000) * 10) / 10;
   }
 
+  renderTableAccessories() {
+    const shoe = this.game.shoe;
+    const dealt = shoe?.dealtSequence?.length ?? 0;
+    const cardsUntilCut = shoe ? shoe.cutCardPosition - dealt : Number.POSITIVE_INFINITY;
+    const shoeBacks = ['blue', 'blue', 'blue'];
+    if (cardsUntilCut >= 0 && cardsUntilCut <= 2) shoeBacks[2 - cardsUntilCut] = 'red';
+    const visibleDiscard = this.discardBacks.slice(-3);
+    return `
+      <div class="table-card-pile discard-pile" data-discard-pile aria-label="Pila de descarte: ${this.discardBacks.length} ${this.discardBacks.length === 1 ? 'carta' : 'cartas'}">
+        <span class="pile-drop-target"></span>
+        <div class="pile-stack" data-discard-stack>${visibleDiscard.map((back, index) => `<span class="pile-card-back ${back}-back" style="--pile-depth:${visibleDiscard.length - index - 1}"></span>`).join('')}</div>
+        <small>DESCARTE</small>
+      </div>
+      <div class="table-card-pile shoe-pile" data-shoe-pile aria-label="Zapato">
+        <div class="pile-stack">${shoeBacks.map((back, index) => `<span class="pile-card-back ${back}-back" style="--pile-depth:${shoeBacks.length - index - 1}"></span>`).join('')}</div>
+        <small>${cardsUntilCut === 0 ? 'CORTE' : cardsUntilCut > 0 && cardsUntilCut <= 2 ? `CORTE EN ${cardsUntilCut}` : 'ZAPATO'}</small>
+      </div>`;
+  }
+
+  renderFeltRules() {
+    return `
+      <div class="felt-watermark">
+        <svg class="felt-rules-art" viewBox="0 0 480 190" role="img" aria-label="Reglas de la mesa">
+          <defs>
+            <path id="ruleArcMain" d="M 70 42 Q 240 94 410 42" />
+            <path id="ruleArcSub" d="M 86 61 Q 240 105 394 61" />
+            <path id="ruleArcBottom" d="M 102 87 Q 240 127 378 87" />
+          </defs>
+          <path class="rule-accent-line rule-accent-top" d="M 95 24 Q 240 73 385 24" />
+          <path class="rule-accent-line rule-accent-middle" d="M 86 68 Q 240 112 394 68" />
+          <path class="rule-accent-line rule-accent-bottom" d="M 124 102 Q 240 130 356 102" />
+          <text class="rule-title"><textPath href="#ruleArcMain" startOffset="50%" text-anchor="middle">BLACKJACK PAGA 3 A 2</textPath></text>
+          <text class="rule-sub"><textPath href="#ruleArcSub" startOffset="50%" text-anchor="middle">EL DEALER PIDE EN 16 Y SE PLANTA EN 17</textPath></text>
+          <text class="rule-bottom"><textPath href="#ruleArcBottom" startOffset="50%" text-anchor="middle">EL SEGURO PAGA 2 A 1</textPath></text>
+        </svg>
+      </div>`;
+  }
+
   // --- Renderizado ---
 
   render() {
@@ -815,40 +927,27 @@ export class BlackjackTableController {
     const latestEvLoss = this.hand?.decisions?.reduce((sum, decision) => sum + (decision.evLoss || 0), 0) ?? 0;
 
     this.root.innerHTML = this.hand ? `
-      <div class="felt-watermark">
-        <svg class="felt-rules-art" viewBox="0 0 480 190" role="img" aria-label="Reglas de la mesa">
-          <defs>
-            <path id="ruleArcMain" d="M 70 42 Q 240 94 410 42" />
-            <path id="ruleArcSub" d="M 86 61 Q 240 105 394 61" />
-            <path id="ruleArcBottom" d="M 102 87 Q 240 127 378 87" />
-          </defs>
-          <path class="rule-accent-line rule-accent-top" d="M 95 24 Q 240 73 385 24" />
-          <path class="rule-accent-line rule-accent-middle" d="M 86 68 Q 240 112 394 68" />
-          <path class="rule-accent-line rule-accent-bottom" d="M 124 102 Q 240 130 356 102" />
-          <text class="rule-title"><textPath href="#ruleArcMain" startOffset="50%" text-anchor="middle">BLACKJACK PAGA 3 A 2</textPath></text>
-          <text class="rule-sub"><textPath href="#ruleArcSub" startOffset="50%" text-anchor="middle">EL DEALER PIDE EN 16 Y SE PLANTA EN 17</textPath></text>
-          <text class="rule-bottom"><textPath href="#ruleArcBottom" startOffset="50%" text-anchor="middle">EL SEGURO PAGA 2 A 1</textPath></text>
-        </svg>
-      </div>
+      ${this.renderTableAccessories()}
+      ${this.renderFeltRules()}
 
       <div class="seat">
         <div class="seat-label">Dealer</div>
         <div class="seat-row">
-          <div class="card-row dealer-cards">${this.renderCards(dealerVisible)}${!resolved ? this.renderFaceDownCard() : ''}</div>
+          <div class="card-row dealer-cards" data-dealer-cards>${this.renderCards(dealerVisible)}${!resolved ? this.renderFaceDownCard(this.hand.dealerCards[1]) : ''}</div>
           <div class="total-pill">${dealerTotal}</div>
         </div>
       </div>
 
       ${this.tableMode === 'multi' ? this.renderSixSeatGrid(activeTarget, results, results2, insuranceProfit) : `
       <div class="seats-row">
-        <div class="seat">
+        <div class="seat ${activeTarget === 'hand' ? 'current-player' : ''}">
           <div class="seat-label">${this.seat2Open ? 'Puesto 1' : 'Tú'}</div>
           <div class="hands-row">
             ${this.hand.playerHands.map((h, i) => {
               const r = results ? results[i] : null;
               const cls = r ? r.result : (i === this.hand.activeHandIndex && activeTarget === 'hand' ? 'active' : '');
               return `
-                <div class="hand-slot ${cls}">
+                <div class="hand-slot ${cls}" data-player-slot="hand" data-hand-index="${i}">
                   ${this.hand.playerHands.length > 1 ? `<div class="hand-slot-label">Jugada ${i + 1}</div>` : ''}
                   <div class="seat-row">
                     <div class="card-row">${this.renderCards(h.cards)}</div>
@@ -869,14 +968,14 @@ export class BlackjackTableController {
         </div>
 
         ${this.hand2 ? `
-          <div class="seat">
+          <div class="seat ${activeTarget === 'hand2' ? 'current-player' : ''}">
             <div class="seat-label">Puesto 2</div>
             <div class="hands-row">
               ${this.hand2.playerHands.map((h, i) => {
                 const r2 = results2 ? results2[i] : null;
                 const cls = r2 ? r2.result : (i === this.hand2.activeHandIndex && activeTarget === 'hand2' ? 'active' : '');
                 return `
-                  <div class="hand-slot ${cls}">
+                  <div class="hand-slot ${cls}" data-player-slot="hand2" data-hand-index="${i}">
                     ${this.hand2.playerHands.length > 1 ? `<div class="hand-slot-label">Jugada ${i + 1}</div>` : ''}
                     <div class="seat-row">
                       <div class="card-row">${this.renderCards(h.cards)}</div>
@@ -899,6 +998,7 @@ export class BlackjackTableController {
         ${this.cutCardLandedOn ? `<div class="cut-card-banner">🔴 Salió la carta de corte en ${this.cutCardLandedOn.label} — ${this.cutCardLandedOn.type === 'bot' ? `${this.cutCardLandedOn.botName} cortará el próximo zapato.` : 'el próximo zapato se corta después de esta mano.'}</div>` : ''}
         ${this.lastError ? `<div class="error-toast">${this.escapeHtml(this.lastError)}</div>` : ''}
 
+        ${this.renderBottomHandTotals(activeTarget)}
         <div class="wager-control">
           <span class="chip-icon wager-chip"><span class="chip-glyph">♛</span></span>
           <div class="wager-copy"><small>APUESTA</small><strong>$${this.currentBet.toFixed(2)}</strong></div>
@@ -1088,18 +1188,13 @@ export class BlackjackTableController {
     } else if (s.position === null) {
       inner = `
         <h2>Elige tu lugar en la mesa</h2>
-        <p>Toca el puesto donde quieres sentarte.</p>
-        <div class="table-seat-map">
-          ${[6, 5, 4, 3, 2, 1].map(p => `
-            <button class="table-seat-btn" data-choose-position="${p}" type="button">${p}</button>
-          `).join('')}
-        </div>
+        <p>Toca directamente una posición vacía de la mesa.</p>
       `;
     } else if (s.botCount === null) {
       const maxBots = 5; // los otros 5 puestos, además del tuyo
       inner = `
-        <h2>¿Cuántos bots quieres en la mesa?</h2>
-        <p>Los jugadores controlados por la CPU ocuparán los puestos libres.</p>
+        <h2>¿Cuántos jugadores quieres en la mesa?</h2>
+        <p>Los jugadores simulados ocuparán las posiciones libres.</p>
         <div class="table-setup-choices wrap">
           ${Array.from({ length: maxBots }, (_, i) => i + 1).map(n => `
             <button class="next-hand-btn secondary" data-bot-count="${n}" type="button">${n}</button>
@@ -1109,14 +1204,38 @@ export class BlackjackTableController {
     } else {
       inner = `
         <h2>Mesa lista</h2>
-        <p>Tú: puesto ${s.position} — ${s.botCount} bot${s.botCount > 1 ? 's' : ''} en la mesa.</p>
+        <p>Tu posición: ${s.position} · ${s.botCount} jugador${s.botCount > 1 ? 'es' : ''} adicional${s.botCount > 1 ? 'es' : ''}.</p>
         <button class="next-hand-btn" data-confirm-table-setup type="button">Continuar</button>
       `;
     }
 
-    this.root.innerHTML = `<div class="cut-ritual">${inner}</div>`;
+    const positionPicker = s.mode === 'multi' && s.position === null;
+    this.root.innerHTML = `
+      ${this.renderTableAccessories()}
+      ${this.renderFeltRules()}
+      ${this.renderSetupTableScene(positionPicker)}
+      <div class="table-flow-overlay ${positionPicker ? 'seat-pick-copy' : ''}"><div class="cut-ritual">${inner}</div></div>`;
     this.wireTableSetupEvents();
     this.emitUpdate();
+  }
+
+  renderSetupTableScene(clickable = false) {
+    const chosenPosition = this.tableSetup?.position;
+    const rows = [[6, 1], [5, 2], [4, 3]];
+    const seats = rows.map(([left, right]) => `<div class="table-seats-row">
+      ${[left, right].map(position => {
+        const selected = position === chosenPosition;
+        const contents = `<span class="setup-seat-number">${position}</span><span>${selected ? 'TÚ' : 'VACÍO'}</span>`;
+        return clickable
+          ? `<button class="setup-table-seat" data-choose-position="${position}" type="button" aria-label="Elegir posición ${position}">${contents}</button>`
+          : `<div class="setup-table-seat ${selected ? 'selected' : ''}">${contents}</div>`;
+      }).join('')}
+    </div>`).join('');
+    return `
+      <div class="setup-table-scene" aria-hidden="${clickable ? 'false' : 'true'}">
+        <div class="setup-dealer-plate">DEALER</div>
+        <div class="table-seats-diamond setup-seat-diamond">${seats}</div>
+      </div>`;
   }
 
   wireTableSetupEvents() {
@@ -1135,41 +1254,44 @@ export class BlackjackTableController {
 
     if (this.botIsCutting) {
       // El bot al que le tocó la carta de corte del zapato anterior corta él mismo.
-      this.root.innerHTML = `
+      this.root.innerHTML = this.renderTableFlowScreen(`
         <div class="cut-ritual">
           <div class="cut-ritual-icon">🤖</div>
           <h2>${this.botIsCutting} está cortando el zapato</h2>
           <p>Le tocó la carta de corte la mano pasada — le toca cortar a él.</p>
-        </div>
-      `;
+        </div>`);
     } else if (this.burnedCardPreview) {
       // Paso 2: ya se cortó — mostrar la carta quemada.
-      this.root.innerHTML = `
+      this.root.innerHTML = this.renderTableFlowScreen(`
         <div class="cut-ritual">
           <div class="cut-ritual-icon">🔥</div>
           <h2>Se quema la primera carta</h2>
           <p>Así se hace en cualquier mesa real, después de cortar.</p>
           <div class="cut-burned-card">${this.renderCards([this.burnedCardPreview])}</div>
           <button class="next-hand-btn" data-continue-after-cut type="button">Empezar a repartir</button>
-        </div>
-      `;
+        </div>`, 'burn-flow');
     } else {
-      // Paso 1: elegir dónde cortar, deslizando la tarjeta roja.
+      // Paso 1: el zapato completo sale a la mesa. La tarjeta que queda
+      // debajo del dedo se vuelve roja, sin mostrar un slider artificial.
       const pct = this.pendingCutPct ?? 0.5;
-      this.root.innerHTML = `
-        <div class="cut-ritual">
+      const cardCount = Math.max(totalCards, 1);
+      const selectedIndex = Math.round(pct * (cardCount - 1));
+      const visualCards = Array.from({ length: cardCount }, (_, index) => {
+        const x = cardCount === 1 ? 139 : (index / (cardCount - 1)) * 278;
+        return `<span class="cut-spread-card blue-back"
+          data-cut-card-index="${index}" style="--cut-x:${x.toFixed(2)}px;--cut-index:${index}"></span>`;
+      }).join('');
+      this.root.innerHTML = this.renderTableFlowScreen(`
+        <div class="cut-ritual cut-ritual-floating">
+          <div class="cut-ritual-icon">✂️</div>
           <h2>Corta el zapato</h2>
-          <p>Desliza la tarjeta roja hacia donde quieras cortar.</p>
-          <div class="cut-deck" data-cut-deck>
-            <div class="cut-deck-stack">
-              ${Array.from({ length: 24 }, (_, i) => `<div class="cut-deck-card" style="left:${(i / 24) * 100}%"></div>`).join('')}
-            </div>
-            <div class="cut-marker" data-cut-marker style="left:${pct * 100}%"></div>
+          <p>Desliza sobre las cartas y deja la tarjeta roja donde quieras cortar.</p>
+          <div class="physical-cut-stage is-locked" data-cut-deck data-card-count="${cardCount}" aria-label="Zapato de ${totalCards} cartas. Desliza para elegir el corte.">
+            <div class="cut-card-spread" data-cut-spread data-initial-cut-index="${selectedIndex}">${visualCards}</div>
           </div>
           <div class="cut-hint" data-cut-hint>${totalCards} cartas — cortando al ${(pct * 100).toFixed(0)}%</div>
-          <button class="next-hand-btn" data-confirm-cut type="button">Cortar aquí</button>
-        </div>
-      `;
+          <button class="next-hand-btn" data-confirm-cut type="button" disabled>Cortar aquí</button>
+        </div>`, 'cut-flow');
     }
 
     this.wireCutRitualEvents();
@@ -1177,23 +1299,51 @@ export class BlackjackTableController {
     this.scheduleViewportFit();
   }
 
+  renderTableFlowScreen(content, modifier = '') {
+    return `
+      ${this.renderTableAccessories()}
+      ${this.renderFeltRules()}
+      ${this.renderRitualTableScene()}
+      <div class="table-flow-overlay ${modifier}">${content}</div>`;
+  }
+
+  renderRitualTableScene() {
+    const rows = [[6, 1], [5, 2], [4, 3]];
+    const seats = rows.map(([left, right]) => `<div class="table-seats-row">
+      ${[left, right].map(position => {
+        const entry = this.tableOrder.find(item => item.position === position);
+        const label = entry ? (entry.type === 'player' ? 'TÚ' : entry.botName) : 'VACÍO';
+        return `<div class="setup-table-seat ${entry ? 'occupied' : ''}"><span class="setup-seat-number">${position}</span><span>${this.escapeHtml(label)}</span></div>`;
+      }).join('')}
+    </div>`).join('');
+    return `<div class="setup-table-scene ritual-table-scene" aria-hidden="true"><div class="setup-dealer-plate">DEALER</div><div class="table-seats-diamond setup-seat-diamond">${seats}</div></div>`;
+  }
+
   wireCutRitualEvents() {
     const deck = this.root.querySelector('[data-cut-deck]');
-    const marker = this.root.querySelector('[data-cut-marker]');
+    const cards = deck ? [...deck.querySelectorAll('[data-cut-card-index]')] : [];
     const hint = this.root.querySelector('[data-cut-hint]');
-    if (deck && marker) {
+    if (deck && cards.length) {
       let dragging = false;
+      let selectedCard = deck.querySelector('.is-cut-marker');
 
       const updateFromPointer = (e) => {
         const rect = deck.getBoundingClientRect();
         const raw = (e.clientX - rect.left) / rect.width;
         const pct = Math.min(Math.max(raw, 0.05), 0.95);
-        this.pendingCutPct = pct;
-        // Actualiza el DOM directamente (sin llamar a render()) para que
-        // el arrastre se sienta fluido en vez de redibujar todo en cada
-        // movimiento del dedo.
-        marker.style.left = `${pct * 100}%`;
-        if (hint) hint.textContent = `${this.game.pendingShoeCards?.totalCards ?? 0} cartas — cortando al ${(pct * 100).toFixed(0)}%`;
+        const selectedIndex = Math.round(pct * (cards.length - 1));
+        this.pendingCutPct = selectedIndex / Math.max(cards.length - 1, 1);
+
+        // Solo la carta que está debajo del dedo cambia a roja. Se actualiza
+        // directamente para que 312 cartas sigan el arrastre sin re-render.
+        selectedCard ||= deck.querySelector('.is-cut-marker');
+        if (selectedCard !== cards[selectedIndex]) {
+          selectedCard?.classList.remove('is-cut-marker', 'red-back');
+          selectedCard?.classList.add('blue-back');
+          selectedCard = cards[selectedIndex];
+          selectedCard.classList.add('is-cut-marker', 'red-back');
+        }
+        if (hint) hint.textContent = `${this.game.pendingShoeCards?.totalCards ?? cards.length} cartas — cortando al ${(this.pendingCutPct * 100).toFixed(0)}%`;
       };
 
       deck.addEventListener('pointerdown', (e) => {
@@ -1204,7 +1354,10 @@ export class BlackjackTableController {
       deck.addEventListener('pointermove', (e) => {
         if (dragging) updateFromPointer(e);
       });
-      deck.addEventListener('pointerup', () => { dragging = false; });
+      deck.addEventListener('pointerup', (e) => {
+        dragging = false;
+        if (deck.hasPointerCapture(e.pointerId)) deck.releasePointerCapture(e.pointerId);
+      });
       deck.addEventListener('pointercancel', () => { dragging = false; });
     }
     const confirmBtn = this.root.querySelector('[data-confirm-cut]');
@@ -1235,7 +1388,7 @@ export class BlackjackTableController {
     const entry = this.tableOrder.find(e => e.position === position);
     if (!entry || !entry.hand) {
       return `
-        <div class="table-seat-slot empty">
+        <div class="table-seat-slot empty" data-position="${position}">
           <span class="table-seat-num">${position}</span>
         </div>
       `;
@@ -1243,8 +1396,10 @@ export class BlackjackTableController {
 
     const isPlayer = entry.type === 'player';
     const hand = entry.hand;
+    const currentEntry = this.tableOrder[this.tableOrderIndex];
+    const isCurrentPlayer = currentEntry === entry && !allPlayerHandsResolved(hand);
     const seatResults = isPlayer ? (entry.slot === 'hand' ? results : results2) : null;
-    const label = isPlayer ? `PUESTO ${position} · TÚ` : `PUESTO ${position} · 🤖 ${entry.botName}`;
+    const label = isPlayer ? 'TÚ' : `🤖 ${entry.botName}`;
 
     const handsHtml = hand.playerHands.map((h, i) => {
       const r = seatResults ? seatResults[i] : null;
@@ -1261,7 +1416,7 @@ export class BlackjackTableController {
         else if (status === 'push') cls = 'push';
       }
       return `
-        <div class="hand-slot ${cls}">
+        <div class="hand-slot ${cls}" data-player-slot="${isPlayer ? entry.slot : ''}" data-hand-index="${i}">
           ${hand.playerHands.length > 1 ? `<div class="hand-slot-label">Jugada ${i + 1}</div>` : ''}
           <div class="seat-row">
             <div class="card-row">${this.renderCards(h.cards)}</div>
@@ -1280,7 +1435,7 @@ export class BlackjackTableController {
     }).join('');
 
     return `
-      <div class="table-seat-slot">
+      <div class="table-seat-slot ${isCurrentPlayer ? 'current-player' : ''}" data-position="${position}">
         <div class="table-seat-label"><span class="table-seat-num">${position}</span> ${label}</div>
         <div class="hands-row">${handsHtml}</div>
       </div>
@@ -1292,13 +1447,388 @@ export class BlackjackTableController {
     // todo; cada carta siguiente se monta encima y hacia la izquierda —
     // reproduciendo el orden real de reparto. z-index explícito garantiza
     // el apilamiento correcto sin depender del orden del DOM.
+    const cutCard = this.game.shoe?.dealtSequence?.[this.game.shoe?.cutCardPosition];
     return cards.map((c, i) => `
-      <div class="card ${['♥','♦'].includes(c.suit) ? 'red' : ''}" style="z-index:${i};">
+      <div class="card ${['♥','♦'].includes(c.suit) ? 'red' : ''}" data-card-index="${i}" data-card-back="${c?.id === cutCard?.id ? 'red' : 'blue'}" style="z-index:${i};">
         <span class="idx idx-tl">${c.rank}<br>${c.suit}</span>
         <span class="card-center">${c.suit}</span>
         <span class="idx idx-br">${c.rank}<br>${c.suit}</span>
       </div>
     `).join('');
+  }
+
+  renderBottomHandTotals(activeTarget) {
+    const ownSeats = this.tableMode === 'multi' && this.tableOrder.length
+      ? this.tableOrder.filter(entry => entry.type === 'player' && entry.hand)
+      : [
+          this.hand ? { slot: 'hand', hand: this.hand } : null,
+          this.hand2 ? { slot: 'hand2', hand: this.hand2 } : null,
+        ].filter(Boolean);
+    const totals = ownSeats.flatMap((entry, seatIndex) => entry.hand.playerHands.map((hand, handIndex) => ({
+      label: ownSeats.length > 1
+        ? `Posición ${seatIndex + 1}${entry.hand.playerHands.length > 1 ? ` · ${handIndex + 1}` : ''}`
+        : (entry.hand.playerHands.length > 1 ? `Jugada ${handIndex + 1}` : 'Tu total'),
+      total: handValue(hand.cards).total,
+      active: activeTarget === entry.slot && entry.hand.activeHandIndex === handIndex,
+    })));
+    if (!totals.length) return '';
+    return `<div class="bottom-hand-totals" aria-label="Totales de tus manos">
+      ${totals.map(item => `<div class="bottom-hand-total ${item.active ? 'active' : ''}"><small>${item.label}</small><strong>${item.total}</strong></div>`).join('')}
+    </div>`;
+  }
+
+  /** Saca visualmente el zapato completo y lo abre sobre el fieltro. */
+  async animateShoeToCutStage() {
+    const spread = this.root.querySelector('[data-cut-spread]');
+    const shoeCard = this.root.querySelector('[data-shoe-pile] .pile-card-back:last-child');
+    const confirmBtn = this.root.querySelector('[data-confirm-cut]');
+    if (!spread) return;
+
+    const spreadRect = spread.getBoundingClientRect();
+    const shoeRect = shoeCard?.getBoundingClientRect();
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    spread.style.clipPath = '';
+    spread.style.visibility = reducedMotion ? 'visible' : 'hidden';
+    this.root.classList.add('cut-shoe-empty');
+
+    // Un proxy redondeado representa el paquete durante la llegada y la
+    // apertura. Solo anima UN elemento; las 312 cartas reales permanecen
+    // ocultas y ya colocadas hasta el relevo final.
+    if (!reducedMotion && shoeRect?.width && spreadRect.width) {
+      spread.dataset.cutPhase = 'opening-shoe';
+      const animationHost = this.root.closest('.app-viewport') || document.body;
+      const hostRect = animationHost === document.body
+        ? { left: 0, top: 0, width: document.documentElement.clientWidth }
+        : animationHost.getBoundingClientRect();
+      const hostScale = animationHost === document.body
+        ? 1
+        : (hostRect.width / animationHost.offsetWidth || 1);
+      const localRect = rect => ({
+        left: (rect.left - hostRect.left) / hostScale,
+        top: (rect.top - hostRect.top) / hostScale,
+        width: rect.width / hostScale,
+        height: rect.height / hostScale,
+      });
+      const localSpread = localRect(spreadRect);
+      const localShoe = localRect(shoeRect);
+      const proxy = document.createElement('div');
+      proxy.className = 'cut-deck-opening-proxy';
+      const targetTop = localSpread.top + 7;
+      const targetCenterLeft = localSpread.left + localSpread.width / 2 - 21;
+      Object.assign(proxy.style, {
+        position: animationHost === document.body ? 'fixed' : 'absolute',
+        left: `${localShoe.left + localShoe.width / 2 - 21}px`,
+        top: `${localShoe.top + localShoe.height / 2 - 31}px`,
+        width: '42px',
+      });
+      animationHost.appendChild(proxy);
+      const dx = targetCenterLeft - Number.parseFloat(proxy.style.left);
+      const dy = targetTop - Number.parseFloat(proxy.style.top);
+      const flight = proxy.animate([
+        { transform: 'translate3d(0,0,0) scale(.55) rotate(7deg)', opacity: .76 },
+        { transform: `translate3d(${dx}px,${dy}px,0) scale(1) rotate(0deg)`, opacity: 1 },
+      ], { duration: 420, easing: 'cubic-bezier(.2,.78,.24,1)', fill: 'forwards' });
+      await flight.finished.catch(() => {});
+      flight.cancel();
+      proxy.style.left = `${targetCenterLeft}px`;
+      proxy.style.top = `${targetTop}px`;
+      proxy.style.transform = 'none';
+
+      const open = proxy.animate([
+        { left: `${targetCenterLeft}px`, width: '42px' },
+        { left: `${localSpread.left}px`, width: `${localSpread.width}px` },
+      ], { duration: 340, easing: 'cubic-bezier(.2,.75,.24,1)', fill: 'forwards' });
+      await open.finished.catch(() => {});
+      spread.style.visibility = 'visible';
+      proxy.remove();
+    }
+    spread.style.visibility = 'visible';
+    spread.classList.add('is-spread');
+    spread.classList.add('is-interactive');
+    const initialIndex = Number(spread.dataset.initialCutIndex);
+    const initialMarker = spread.querySelector(`[data-cut-card-index="${initialIndex}"]`);
+    initialMarker?.classList.add('is-cut-marker', 'red-back');
+    spread.closest('[data-cut-deck]')?.classList.remove('is-locked');
+    spread.dataset.cutPhase = 'ready';
+    if (confirmBtn) confirmBtn.disabled = false;
+  }
+
+  /**
+   * Representa el corte físico sin volver a calcular ninguna regla:
+   * envuelve el bloque superior, inserta la roja a la profundidad que ya
+   * decidió el motor y devuelve el zapato armado a su esquina.
+   */
+  async animateCutSequence(cutPct, cutCardPosition) {
+    const stage = this.root.querySelector('[data-cut-deck]');
+    const spread = this.root.querySelector('[data-cut-spread]');
+    const shoe = this.root.querySelector('[data-shoe-pile]');
+    if (!stage || !spread || !shoe) return;
+
+    const cards = [...spread.querySelectorAll('[data-cut-card-index]')];
+    if (!cards.length) return;
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const selectedIndex = Math.min(cards.length - 1, Math.max(0, Math.round(cutPct * (cards.length - 1))));
+    const redCard = cards[selectedIndex];
+    const confirmBtn = this.root.querySelector('[data-confirm-cut]');
+    if (confirmBtn) confirmBtn.disabled = true;
+    stage.classList.add('is-locked');
+    stage.setAttribute('aria-busy', 'true');
+    spread.classList.remove('is-interactive');
+    spread.classList.add('is-confirmed');
+    this.root.classList.add('cut-sequence-running');
+
+    // Al confirmar, la roja deja de sobresalir: se alinea con todas las
+    // cartas y permanece visible/encima durante el corte completo.
+    redCard.classList.add('is-cut-marker', 'red-back');
+    redCard.style.transform = 'translate3d(0,0,0)';
+    redCard.style.translate = '0 0';
+    redCard.style.opacity = '1';
+    redCard.style.zIndex = String(cards.length + 20);
+
+    if (!reducedMotion && typeof redCard.animate === 'function') {
+      // Un solo movimiento combinado: el frente original arquea hacia el
+      // fondo mientras el bloque posterior pasa al frente por debajo.
+      const redBlock = cards.slice(0, selectedIndex + 1);
+      const upperBlock = cards.slice(selectedIndex + 1);
+      upperBlock.forEach((card, index) => { card.style.zIndex = String(index + 1); });
+      redBlock.forEach((card, index) => { card.style.zIndex = String(upperBlock.length + index + 2); });
+      redCard.style.zIndex = String(cards.length + 20);
+      const spacing = cards.length > 1 ? 278 / (cards.length - 1) : 0;
+      const straightLineState = cards.map((card, originalIndex) => {
+        const newIndex = originalIndex > selectedIndex
+          ? originalIndex - selectedIndex - 1
+          : upperBlock.length + originalIndex;
+        const originalX = Number.parseFloat(card.style.getPropertyValue('--cut-x')) || 0;
+        const targetX = newIndex * spacing;
+        return { card, originalIndex, newIndex, dx: targetX - originalX };
+      });
+      spread.dataset.cutPhase = 'swapping';
+      const swapAnimations = straightLineState.map(({ card, originalIndex, dx }) => {
+        const movesToBack = originalIndex <= selectedIndex;
+        return card.animate([
+          { transform: 'translate3d(0,0,0)' },
+          { transform: `translate3d(${dx * .52}px,${movesToBack ? -34 : 34}px,0) rotate(${movesToBack ? 1 : -1}deg)`, offset: .5 },
+          { transform: `translate3d(${dx}px,0,0) rotate(0deg)` },
+        ], {
+          duration: 640,
+          easing: 'cubic-bezier(.3,.02,.18,1)',
+          fill: 'forwards',
+        });
+      });
+      await Promise.all(swapAnimations.map(animation => animation.finished.catch(() => {})));
+      swapAnimations.forEach(animation => {
+        animation.commitStyles?.();
+        animation.cancel();
+      });
+      straightLineState.forEach(({ card, newIndex, dx }) => {
+        card.style.transform = `translate3d(${dx}px,0,0)`;
+        card.style.zIndex = String(newIndex + 1);
+      });
+      spread.classList.add('is-straight-line');
+      spread.dataset.cutPhase = 'straight';
+
+      redCard.style.zIndex = String(cards.length + 20);
+      redCard.style.translate = '0 0';
+      redCard.style.opacity = '1';
+      await sleep(360);
+
+      // Primero toda la línea se comprime. La roja sigue arriba y alineada
+      // hasta que ya existe un único paquete del tamaño de una carta.
+      spread.dataset.cutPhase = 'collapsing';
+      const collapseAnimations = cards.map(card => {
+        const currentTransform = getComputedStyle(card).transform;
+        const x = Number.parseFloat(card.style.getPropertyValue('--cut-x')) || 0;
+        return card.animate([
+          { transform: currentTransform === 'none' ? 'translate3d(0,0,0)' : currentTransform },
+          { transform: `translate3d(${139 - x}px,0,0) rotate(0deg)` },
+        ], {
+          duration: 360,
+          easing: 'cubic-bezier(.24,.7,.2,1)',
+          fill: 'forwards',
+        });
+      });
+      await Promise.all(collapseAnimations.map(animation => animation.finished.catch(() => {})));
+      spread.classList.remove('is-straight-line');
+      spread.dataset.cutPhase = 'collapsed';
+      await sleep(110);
+
+      // Ya colapsado: la roja sale a la derecha, cambia a su profundidad
+      // real y vuelve a entrar recta por debajo de las cartas azules.
+      const redDepth = Math.max(2, Math.min(cards.length - 2, cards.length - cutCardPosition));
+      spread.dataset.cutPhase = 'red-sliding-out';
+      const redSlideOut = redCard.animate([
+        { translate: '0 0' },
+        { translate: '38px 0' },
+      ], { duration: 185, easing: 'cubic-bezier(.3,.02,.2,1)', fill: 'forwards' });
+      await redSlideOut.finished.catch(() => {});
+      redSlideOut.commitStyles?.();
+      redSlideOut.cancel();
+      redCard.style.translate = '38px 0';
+      redCard.style.zIndex = String(redDepth);
+      spread.dataset.cutPhase = 'red-sliding-under';
+      const redSlideUnder = redCard.animate([
+        { translate: '38px 0' },
+        { translate: '0 0' },
+      ], { duration: 215, easing: 'cubic-bezier(.2,.72,.2,1)', fill: 'forwards' });
+      await redSlideUnder.finished.catch(() => {});
+      redSlideUnder.commitStyles?.();
+      redSlideUnder.cancel();
+      redCard.style.translate = '0 0';
+      spread.dataset.cutPhase = 'red-inserted';
+      await sleep(120);
+
+      // El paquete completo vuelve a la ubicación del zapato; el zapato
+      // de tres cartas reaparece solo cuando el paquete está aterrizando.
+      const spreadRect = spread.getBoundingClientRect();
+      const shoeRect = shoe.getBoundingClientRect();
+      const dx = (shoeRect.left + shoeRect.width / 2) - (spreadRect.left + spreadRect.width / 2);
+      const dy = (shoeRect.top + shoeRect.height / 2) - (spreadRect.top + spreadRect.height / 2);
+      const scale = Math.max(.12, Math.min(shoeRect.width / spreadRect.width, .24));
+      const returnFlight = spread.animate([
+        { transform: 'translate3d(0,0,0) scale(1)', opacity: 1 },
+        { transform: `translate3d(${dx}px,${dy}px,0) scale(${scale}) rotate(7deg)`, opacity: .8 },
+      ], { duration: 540, easing: 'cubic-bezier(.24,.68,.2,1)', fill: 'forwards' });
+      await sleep(390);
+      this.root.classList.remove('cut-shoe-empty');
+      await returnFlight.finished.catch(() => {});
+    } else {
+      this.root.classList.remove('cut-shoe-empty');
+    }
+
+    stage.removeAttribute('aria-busy');
+  }
+
+  async animateInitialDeal() {
+    const shoe = this.root.querySelector('[data-shoe-pile] .pile-card-back:last-child');
+    if (!shoe) return;
+    const cards = [...this.root.querySelectorAll('.card')];
+    const seatRank = card => {
+      if (card.closest('[data-dealer-cards]')) return 99;
+      const position = Number(card.closest('[data-position]')?.dataset.position);
+      if (position) return position;
+      return card.closest('[data-player-slot="hand2"]') ? 2 : 1;
+    };
+    cards.sort((a, b) => Number(a.dataset.cardIndex) - Number(b.dataset.cardIndex) || seatRank(a) - seatRank(b));
+    cards.forEach(card => { card.style.opacity = '0'; });
+    const flights = [];
+    for (const card of cards) {
+      flights.push(this.flyCard(shoe, card, { revealTarget: true }));
+      await sleep(75);
+    }
+    await Promise.all(flights);
+  }
+
+  async animateCardFromShoe(selector) {
+    const shoe = this.root.querySelector('[data-shoe-pile] .pile-card-back:last-child');
+    const target = this.root.querySelector(selector);
+    if (!shoe || !target) return;
+    target.style.opacity = '0';
+    await this.flyCard(shoe, target, { revealTarget: true });
+  }
+
+  async flyCard(source, target, { revealTarget = false, face = false, delay = 0 } = {}) {
+    const sourceRect = source.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    if (!sourceRect.width || !targetRect.width) {
+      if (revealTarget) target.style.opacity = '';
+      return;
+    }
+    const animationHost = this.root.closest('.app-viewport') || document.body;
+    const hostRect = animationHost === document.body
+      ? { left: 0, top: 0, width: document.documentElement.clientWidth }
+      : animationHost.getBoundingClientRect();
+    const hostScale = animationHost === document.body
+      ? 1
+      : (hostRect.width / animationHost.offsetWidth || 1);
+    const localRect = rect => ({
+      left: (rect.left - hostRect.left) / hostScale,
+      top: (rect.top - hostRect.top) / hostScale,
+      width: rect.width / hostScale,
+      height: rect.height / hostScale,
+    });
+    const localSource = localRect(sourceRect);
+    const localTarget = localRect(targetRect);
+    const flying = face ? source.cloneNode(true) : document.createElement('div');
+    flying.className = face
+      ? `${source.className} flying-table-card`
+      : `card face-down ${target.dataset.cardBack === 'red' ? 'red-back' : 'blue-back'} flying-table-card`;
+    const flightWidth = face ? localSource.width : localTarget.width;
+    const flightHeight = face ? localSource.height : localTarget.height;
+    const startLeft = localSource.left + localSource.width / 2 - flightWidth / 2;
+    const startTop = localSource.top + localSource.height / 2 - flightHeight / 2;
+    const finishLeft = localTarget.left + localTarget.width / 2 - flightWidth / 2;
+    const finishTop = localTarget.top + localTarget.height / 2 - flightHeight / 2;
+    const pileToCardScale = Math.min(localSource.width / localTarget.width, localSource.height / localTarget.height);
+    const cardToPileScale = Math.min(localTarget.width / localSource.width, localTarget.height / localSource.height);
+    const startScale = face ? 1 : pileToCardScale;
+    const endScale = face ? cardToPileScale : 1;
+    const middleScale = startScale + ((endScale - startScale) * .58) + .025;
+    Object.assign(flying.style, {
+      position: animationHost === document.body ? 'fixed' : 'absolute', left: `${startLeft}px`, top: `${startTop}px`, width: `${flightWidth}px`,
+      height: `${flightHeight}px`, margin: '0', zIndex: '1200', pointerEvents: 'none', opacity: '1',
+    });
+    animationHost.appendChild(flying);
+    const dx = finishLeft - startLeft;
+    const dy = finishTop - startTop;
+    if (typeof flying.animate !== 'function') {
+      flying.remove();
+      if (revealTarget) target.style.opacity = '';
+      return;
+    }
+    const animation = flying.animate([
+      { transform: `translate3d(0,0,0) rotate(-5deg) scale(${startScale})` },
+      { transform: `translate3d(${dx * .55}px,${dy * .48 - 18}px,0) rotate(4deg) scale(${middleScale})`, offset: .58 },
+      { transform: `translate3d(${dx}px,${dy}px,0) rotate(0deg) scale(${endScale})` },
+    ], { duration: 330, delay, easing: 'cubic-bezier(.22,.75,.25,1)', fill: 'forwards' });
+    await animation.finished.catch(() => {});
+    flying.remove();
+    if (revealTarget) target.style.opacity = '';
+  }
+
+  async animateDealerReveal() {
+    const dealerCards = [...this.root.querySelectorAll('[data-dealer-cards] .card')];
+    const holeCard = dealerCards.find(card => card.dataset.cardIndex === '1');
+    if (holeCard) {
+      holeCard.classList.add('dealer-flip-reveal');
+      await sleep(360);
+    }
+    for (const card of dealerCards.filter(card => Number(card.dataset.cardIndex) > 1)) {
+      await this.animateCardFromShoe(`[data-dealer-cards] .card[data-card-index="${card.dataset.cardIndex}"]`);
+      await sleep(90);
+    }
+  }
+
+  async animateCardsToDiscard() {
+    const discard = this.root.querySelector('[data-discard-pile]');
+    const cards = [...this.root.querySelectorAll('.card')].filter(card => !card.closest('.table-card-pile'));
+    if (!discard || !cards.length) return;
+    this.cardsInMotion = true;
+    this.root.classList.add('cards-in-motion');
+    const flights = [];
+    cards.reverse().forEach((card, index) => {
+      card.classList.remove('dealer-flip-reveal');
+      card.style.opacity = '0';
+      flights.push((async () => {
+        await sleep(index * 42);
+        await this.flyCard(card, discard.querySelector('.pile-drop-target'), { face: true });
+        this.discardBacks.push(card.dataset.cardBack === 'red' ? 'red' : 'blue');
+        this.updateDiscardPileVisual();
+      })());
+    });
+    await Promise.all(flights);
+    this.cardsInMotion = false;
+    this.root.classList.remove('cards-in-motion');
+  }
+
+  updateDiscardPileVisual() {
+    const pile = this.root.querySelector('[data-discard-pile]');
+    const stack = pile?.querySelector('[data-discard-stack]');
+    if (!pile || !stack) return;
+    const visible = this.discardBacks.slice(-3);
+    stack.innerHTML = visible.map((back, index) => `<span class="pile-card-back ${back}-back" style="--pile-depth:${visible.length - index - 1}"></span>`).join('');
+    pile.setAttribute('aria-label', `Pila de descarte: ${this.discardBacks.length} ${this.discardBacks.length === 1 ? 'carta' : 'cartas'}`);
+    const label = pile.querySelector('small');
+    if (label) label.textContent = 'DESCARTE';
   }
 
   renderRecentHistory() {
@@ -1336,8 +1866,10 @@ export class BlackjackTableController {
     }).join('');
   }
 
-  renderFaceDownCard() {
-    return `<div class="card face-down" style="z-index:-1;" aria-label="Carta tapada"></div>`;
+  renderFaceDownCard(card = null) {
+    const cutCard = this.game.shoe?.dealtSequence?.[this.game.shoe?.cutCardPosition];
+    const back = card?.id === cutCard?.id ? 'red' : 'blue';
+    return `<div class="card face-down ${back}-back" data-card-back="${back}" data-card-index="1" style="z-index:-1;" aria-label="Carta tapada"></div>`;
   }
 
   escapeHtml(str) {

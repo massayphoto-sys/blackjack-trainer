@@ -6,9 +6,10 @@
   <meta name="description" content="Blackjack Trainer — mesa de entrenamiento.">
   <meta name="theme-color" content="#030503">
   <title>Mesa — Blackjack Trainer</title>
-  <link rel="stylesheet" href="./css/game.css?v=mobile-fit-4">
+  <link rel="stylesheet" href="./css/game.css?v=table-motion-28">
 </head>
 <body>
+  <main class="app-viewport" id="appViewport">
   <div class="table-screen" id="tableScreen">
     <header class="casino-header">
       <div class="casino-brand" aria-label="Blackjack Trainer">
@@ -80,7 +81,9 @@
       <svg viewBox="0 0 32 28" aria-hidden="true"><rect x="4" y="15" width="5" height="10" rx="1"/><rect x="13" y="8" width="5" height="17" rx="1"/><rect x="22" y="3" width="5" height="22" rx="1"/></svg><span>ESTADÍSTICAS</span>
     </a>
   </nav>
+  </main>
 
-  <script type="module" src="./js/table-bootstrap.js?v=mobile-fit-4"></script>
+  <script src="./js/app-viewport.js?v=5"></script>
+  <script type="module" src="./js/table-bootstrap.js?v=table-motion-25"></script>
 </body>
 </html>

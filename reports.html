@@ -6,10 +6,10 @@
   <meta name="description" content="Blackjack Trainer — reporte de precisión.">
   <meta name="theme-color" content="#030503">
   <title>Reportes — Blackjack Trainer</title>
-  <link rel="stylesheet" href="./css/game.css?v=reports-3">
+  <link rel="stylesheet" href="./css/game.css?v=reports-7">
   <style>
     html, body { width: 100%; height: 100%; overflow: hidden; }
-    .reports-screen { width: 100%; max-width: 480px; height: calc(100dvh - 64px); margin: 0 auto; overflow: hidden; display: flex; flex-direction: column; background: #030503; }
+    .reports-screen { width: 100%; max-width: none; height: calc(100% - 64px); margin: 0; overflow: hidden; display: flex; flex-direction: column; background: #030503; }
     .reports-topbar {
       flex: 0 0 auto; display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: linear-gradient(180deg, #090b09, #020302);
       border-bottom: 1px solid rgba(197,158,70,.18); position: relative; z-index: 5;
@@ -94,6 +94,7 @@
   </style>
 </head>
 <body>
+  <main class="app-viewport" id="appViewport">
   <div class="reports-screen">
     <div class="reports-topbar">
       <button id="backButton" class="icon-btn" type="button" aria-label="Volver a la mesa">←</button>
@@ -119,7 +120,9 @@
       <svg viewBox="0 0 32 28" aria-hidden="true"><rect x="4" y="15" width="5" height="10" rx="1"/><rect x="13" y="8" width="5" height="17" rx="1"/><rect x="22" y="3" width="5" height="22" rx="1"/></svg><span>ESTADÍSTICAS</span>
     </a>
   </nav>
+  </main>
 
-  <script type="module" src="./js/reports-bootstrap.js?v=reports-3"></script>
+  <script src="./js/app-viewport.js?v=5"></script>
+  <script type="module" src="./js/reports-bootstrap.js?v=reports-4"></script>
 </body>
 </html>

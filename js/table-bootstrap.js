@@ -6,9 +6,9 @@
 
 import { getCurrentSession, subscribeToAuthChanges, signOut } from './auth.js';
 import * as gameRepository from './game-repository.js';
-import { BlackjackTableController } from './game-ui.js?v=mobile-fit-4';
+import { BlackjackTableController } from './game-ui.js?v=table-motion-25';
 import { clearLegacyAppCache, isPreviewMode, previewRepository } from './preview.js';
-import { openBuyChipsDialog, openLimitsDialog } from './hud-dialogs.js?v=2';
+import { openBuyChipsDialog, openLimitsDialog } from './hud-dialogs.js?v=4';
 
 const previewMode = isPreviewMode();
 

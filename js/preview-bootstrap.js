@@ -1,6 +1,6 @@
-import { BlackjackTableController } from './game-ui.js?v=mobile-fit-4';
+import { BlackjackTableController } from './game-ui.js?v=table-motion-25';
 import { clearLegacyAppCache, previewRepository } from './preview.js?v=multiplayer-1';
-import { openBuyChipsDialog, openLimitsDialog } from './hud-dialogs.js?v=2';
+import { openBuyChipsDialog, openLimitsDialog, openShoeTestDialog } from './hud-dialogs.js?v=4';
 
 const byId = id => document.getElementById(id);
 const tableRoot = byId('tableRoot');
@@ -40,6 +40,7 @@ const controller = new BlackjackTableController({
 
 byId('buyChipsButton').addEventListener('click', () => openBuyChipsDialog(controller));
 byId('limitsButton').addEventListener('click', () => openLimitsDialog(controller));
+byId('shoeTestButton').addEventListener('click', () => openShoeTestDialog(controller));
 byId('reportsButton').addEventListener('click', () => { window.location.href = './reports.html?preview=1&view=nav-3'; });
 byId('exitButton').addEventListener('click', () => { window.location.href = './index.html'; });
 byId('hudMenuButton').addEventListener('click', () => { byId('hudUtilityMenu').hidden = !byId('hudUtilityMenu').hidden; });
